@@ -658,7 +658,7 @@ int main(int argc, char* argv[])
  problem.impose_no_slip_on_bottom_boundary();
 
  //Loop over the remaining timesteps
- ntsteps=1000;
+ ntsteps=50;
  for(unsigned t=1;t<=ntsteps;t++)
   {
    oomph_info << "TIMESTEP " << t << std::endl;
