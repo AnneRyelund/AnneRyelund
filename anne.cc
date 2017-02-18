@@ -47,13 +47,13 @@ using namespace oomph;
 namespace Global_Parameters
 {
  /// Reynolds number
- double Re=100.0;
+ double Re=1000.0;
 
  /// Left end of computational domain
- double X_left=-3.36;
+ double X_left=-3.63;
  
  /// Right end of computational domain
- double X_right=3.36;
+ double X_right=3.63;
 
  /// Height of computational domain
  double Height=5.13;
@@ -73,23 +73,23 @@ namespace Global_Parameters
   //               (1) All these numbers must have some relation to
   //                   the Reynolds number (I just set them to 1)
   //               (2) Add uniform background flow
-  double a=1.0;
-  double omega_0=1.0;
-  double h=1.0;
+  double a=0.3;
+  double omega_0=-1.25;
+  double k=0.02812;
 
   // Top vortex
   double r1=sqrt(pow(x[0]-X_vortex,2)+
                 pow(x[1]-Y_vortex,2));
   double theta1=atan2(x[1]-Y_vortex,x[0]-X_vortex);
-  double u_theta1=omega_0*h*h/(2.0*r1)*(1.0-exp(-r1*r1/(a*a)));
+  double u_theta1=omega_0*a*a/(2.0*r1)*(1.0-exp(-r1*r1/(a*a)));
 
   // Bottom vortex
   double r2=sqrt(pow(x[0]-X_vortex,2)+
                  pow(x[1]+Y_vortex,2));
   double theta2=atan2(x[1]+Y_vortex,x[0]-X_vortex);
-  double u_theta2=omega_0*h*h/(2.0*r2)*(1.0-exp(-r2*r2/(a*a)));
+  double u_theta2=omega_0*a*a/(2.0*r2)*(1.0-exp(-r2*r2/(a*a)));
 
-  u[0]=-u_theta1*sin(theta1)+u_theta2*sin(theta2);
+  u[0]=-u_theta1*sin(theta1)+u_theta2*sin(theta2)+k;
   u[1]= u_theta1*cos(theta1)-u_theta2*cos(theta2);
  }
 
@@ -623,12 +623,12 @@ int main(int argc, char* argv[])
   }
  
 // Initialise all history values for an impulsive start
- double dt=0.005; 
+ double dt=0.2; 
  problem.initialise_dt(dt);
  problem.assign_initial_values_impulsive();
 
  // Number of timesteps until switch-over to no slip
- unsigned ntsteps=10;
+ unsigned ntsteps=150;
 
  // Doc initial condition
  problem.doc_solution(doc_info);
@@ -658,7 +658,7 @@ int main(int argc, char* argv[])
  problem.impose_no_slip_on_bottom_boundary();
 
  //Loop over the remaining timesteps
- ntsteps=50;
+ ntsteps=600;
  for(unsigned t=1;t<=ntsteps;t++)
   {
    oomph_info << "TIMESTEP " << t << std::endl;
