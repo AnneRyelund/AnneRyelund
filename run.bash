@@ -8,7 +8,7 @@ dir=RESLT
 if [ -e $dir ]; then
     echo " "
     echo " "
-    echo "Directory " $main_dir "already exists -- please move it out of the way."
+    echo "Directory " $dir "already exists -- please move it out of the way."
     echo " "
     echo " "
     exit
