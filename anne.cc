@@ -58,6 +58,18 @@ namespace Global_Parameters
  /// Height of computational domain
  double Height=5.13;
 
+ /// Number of elements in x-direction
+ unsigned Nx=10;
+
+ /// Number of elements in y-direction
+ unsigned Ny=10;
+
+ /// \short Thickness of "boundary layer" region into which we squash
+ /// the elements
+ double Y_bl=0.5;
+
+ /// Percentage of elements squashed into "boundary layer"
+ double Percentage_of_elements_in_bl=50.0;
 
  /// x position of vortex
  double X_vortex=0.0;
@@ -273,10 +285,10 @@ AnneProblem<ELEMENT>::AnneProblem()
  add_time_stepper_pt(new BDF<2>); 
 
  // Number of elements in x direction
- unsigned nx=10;
+ unsigned nx=Global_Parameters::Nx;
 
  // Number of elements in y direction
- unsigned ny=10;
+ unsigned ny=Global_Parameters::Ny;
 
  // Left end of computational domain
  double x_min=Global_Parameters::X_left;
@@ -294,6 +306,33 @@ AnneProblem<ELEMENT>::AnneProblem()
  mesh_pt() = 
   new RefineableRectangularQuadMesh<ELEMENT>(nx,ny,x_min,x_max,y_min,y_max,
                                              time_stepper_pt());
+
+ // Squash it?
+ if (CommandLineArgs::command_line_flag_has_been_set("--percentage_of_elements_in_bl")||
+     CommandLineArgs::command_line_flag_has_been_set("--y_bl"))
+  {
+   oomph_info << "Squashing " << Global_Parameters::Percentage_of_elements_in_bl
+              << " % of elements in \"boundary layer\" of thickness " 
+              << Global_Parameters::Y_bl << std::endl;
+   double y_bl=Global_Parameters::Y_bl;
+   double percentage_el_in_bl=Global_Parameters::Percentage_of_elements_in_bl;
+   unsigned ny_bl=unsigned(double(ny)*percentage_el_in_bl/100.0);
+   double y_bl_orig=double(ny_bl)/double(ny)*y_max;
+   unsigned nnod=mesh_pt()->nnode();
+   for (unsigned j=0;j<nnod;j++)
+    {
+     double y=mesh_pt()->node_pt(j)->x(1);
+     if (y<=y_bl_orig)
+      {
+       mesh_pt()->node_pt(j)->x(1)=y_bl*y/y_bl_orig;
+      }
+     else
+      {
+       mesh_pt()->node_pt(j)->x(1)=y_bl+
+        (y_max-y_bl)*(y-y_bl_orig)/(y_max-y_bl_orig);
+      }
+    }
+  }
 
  // Check enumeration of boundaries
  mesh_pt()->output_boundaries("boundaries.dat");
@@ -596,6 +635,20 @@ int main(int argc, char* argv[])
  CommandLineArgs::specify_command_line_flag("--validate_projection");
 
  // Reynolds number
+ CommandLineArgs::specify_command_line_flag("--re",
+                                            &Global_Parameters::Re);
+
+ // Thickness of "boundary layer" region into which we squash
+ // the elements
+ CommandLineArgs::specify_command_line_flag("--y_bl",
+                                            &Global_Parameters::Y_bl);
+
+ /// Percentage of elements squashed into "boundary layer"
+ CommandLineArgs::specify_command_line_flag(
+  "--percentage_of_elements_in_bl",
+  &Global_Parameters:: Percentage_of_elements_in_bl);
+
+ //
  CommandLineArgs::specify_command_line_flag("--re",
                                             &Global_Parameters::Re);
 
