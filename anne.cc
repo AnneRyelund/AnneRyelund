@@ -47,7 +47,7 @@ using namespace oomph;
 namespace Global_Parameters
 {
  /// Reynolds number
- double Re=1000.0;
+ double Re=4000.0;
 
  /// Left end of computational domain
  double X_left=-3.63;
@@ -59,23 +59,33 @@ namespace Global_Parameters
  double Height=5.13;
 
  /// Number of elements in x-direction
- unsigned Nx=10;
+ unsigned Nx=30;
 
  /// Number of elements in y-direction
- unsigned Ny=10;
+ unsigned Ny=30;
 
- /// \short Thickness of "boundary layer" region into which we squash
+ /// Thickness of "boundary layer" region into which we squash
  /// the elements
- double Y_bl=0.5;
+ double Y_bl=3;
 
  /// Percentage of elements squashed into "boundary layer"
- double Percentage_of_elements_in_bl=50.0;
+ double Percentage_of_elements_in_bl=80.0;
+
+ /// Thickness of the middle region into which we squash
+ /// the elements
+ double X_mid = 4.5;
+
+ /// Percentage of elements squashed into the middle region
+ double Percentage_of_elements_in_mid=80.0;	
 
  /// x position of vortex
  double X_vortex=0.0;
 
  /// x position of vortex
  double Y_vortex=1.0;
+
+ /// Uniform background flow
+ double k=0.02812;
 
  /// Initial condition for velocity
  void initial_condition(const Vector<double>& x, Vector<double>& u)
@@ -87,7 +97,6 @@ namespace Global_Parameters
   //               (2) Add uniform background flow
   double a=0.3;
   double omega_0=-1.25;
-  double k=0.02812;
 
   // Top vortex
   double r1=sqrt(pow(x[0]-X_vortex,2)+
@@ -104,10 +113,6 @@ namespace Global_Parameters
   u[0]=-u_theta1*sin(theta1)+u_theta2*sin(theta2)+k;
   u[1]= u_theta1*cos(theta1)-u_theta2*cos(theta2);
  }
-
-
-
-
 
 
  /// sin/cos velocity field for validation of vorticity projection
@@ -310,16 +315,18 @@ AnneProblem<ELEMENT>::AnneProblem()
   new RefineableRectangularQuadMesh<ELEMENT>(nx,ny,x_min,x_max,y_min,y_max,
                                              time_stepper_pt());
 
+
  // Now create a uniform mesh
  Uniform_mesh_pt = 
   new RefineableRectangularQuadMesh<ELEMENT>(3*nx,3*ny,x_min,x_max,y_min,y_max,
                                              time_stepper_pt());
  
 
- // Squash it?
+
+ // Squash it to boundary layer?
  if (CommandLineArgs::command_line_flag_has_been_set("--percentage_of_elements_in_bl")||
      CommandLineArgs::command_line_flag_has_been_set("--y_bl"))
-  {
+{
    oomph_info << "Squashing " << Global_Parameters::Percentage_of_elements_in_bl
               << " % of elements in \"boundary layer\" of thickness " 
               << Global_Parameters::Y_bl << std::endl;
@@ -341,8 +348,41 @@ AnneProblem<ELEMENT>::AnneProblem()
         (y_max-y_bl)*(y-y_bl_orig)/(y_max-y_bl_orig);
       }
     }
-  }
+   }
 
+ // Squash it to middle region?
+ if (CommandLineArgs::command_line_flag_has_been_set("--percentage_of_elements_in_mid")|| 
+     CommandLineArgs::command_line_flag_has_been_set("--x_mid"))
+  {  
+   oomph_info << "Squashing " << Global_Parameters::Percentage_of_elements_in_mid
+              << " % of elements in middle region of thickness " 
+              << Global_Parameters::X_mid << std::endl;
+   double x_mid=Global_Parameters::X_mid;
+   double percentage_el_in_mid=Global_Parameters::Percentage_of_elements_in_mid;
+   unsigned nx_mid=unsigned(double(nx)*percentage_el_in_mid/100.0);
+   double x_left_orig=-(double(nx_mid)/double(nx))*(x_max-x_min)/2.0;
+   double x_right_orig=-x_left_orig;
+   unsigned no_nod=mesh_pt()->nnode();
+   for (unsigned j=0;j<no_nod;j++)
+    {
+     double x=mesh_pt()->node_pt(j)->x(0);
+     if (x<=x_right_orig && x>=x_left_orig)
+      {
+       mesh_pt()->node_pt(j)->x(0)=x_mid*x/(x_right_orig-x_left_orig);
+      }
+     else if (x<=x_left_orig)
+      {
+       mesh_pt()->node_pt(j)->x(0)=-x_mid/2.0+
+        (x_min+x_mid/2.0)*(x-x_left_orig)/(x_min-x_left_orig);
+      }
+     else 
+      {
+       mesh_pt()->node_pt(j)->x(0)=x_mid/2.0+
+        (x_max-x_mid/2.0)*(x-x_right_orig)/(x_max-x_right_orig);
+      }
+    }
+  }
+ 
  // Check enumeration of boundaries
  mesh_pt()->output_boundaries("boundaries.dat");
 
@@ -518,7 +558,7 @@ void AnneProblem<ELEMENT>::impose_no_slip_on_bottom_boundary()
  for (unsigned inod=0;inod<num_nod;inod++)
   {
    mesh_pt()->boundary_node_pt(ibound,inod)->pin(0);
-   mesh_pt()->boundary_node_pt(ibound,inod)->set_value(0,0.0);
+   mesh_pt()->boundary_node_pt(ibound,inod)->set_value(0,Global_Parameters::k);
   }
 
  // Re-assign equation numbers
@@ -748,7 +788,6 @@ void AnneProblem<ELEMENT>::check_smoothed_vorticity(DocInfo& doc_info)
  
  // Done!
  exit(0);
-
 }
 
 
@@ -779,9 +818,15 @@ int main(int argc, char* argv[])
   "--percentage_of_elements_in_bl",
   &Global_Parameters:: Percentage_of_elements_in_bl);
 
- //
- CommandLineArgs::specify_command_line_flag("--re",
-                                            &Global_Parameters::Re);
+ /// Thickness of the middle region into which we squash
+ /// the elements
+ CommandLineArgs::specify_command_line_flag("--x_mid",
+                                           &Global_Parameters::X_mid);
+
+ /// Percentage of elements squashed into the middle region
+ CommandLineArgs::specify_command_line_flag(
+  "--percentage_of_elements_in_mid",
+ &Global_Parameters:: Percentage_of_elements_in_mid);
 
  // Use gmres?
  CommandLineArgs::specify_command_line_flag("--use_oomph_gmres");
@@ -807,12 +852,12 @@ int main(int argc, char* argv[])
   }
  
 // Initialise all history values for an impulsive start
- double dt=0.2; 
+ double dt=0.1; 
  problem.initialise_dt(dt);
  problem.assign_initial_values_impulsive();
 
  // Number of timesteps until switch-over to no slip
- unsigned ntsteps=150;
+ unsigned ntsteps=10;
 
  // Doc initial condition
  problem.doc_solution(doc_info);
@@ -842,7 +887,7 @@ int main(int argc, char* argv[])
  problem.impose_no_slip_on_bottom_boundary();
 
  //Loop over the remaining timesteps
- ntsteps=600;
+ ntsteps=1300;
  for(unsigned t=1;t<=ntsteps;t++)
   {
    oomph_info << "TIMESTEP " << t << std::endl;
