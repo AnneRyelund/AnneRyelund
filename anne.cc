@@ -212,7 +212,7 @@ namespace Global_Parameters
 /// Problem class for Anne's MSc problem
 //======================================================================
 template<class ELEMENT>
-class AnneProblem : public Problem
+class AnneProblem : public Problem, public ClassThatCanCallProjection
 {
 public:
 
@@ -266,6 +266,9 @@ private:
  /// Vorticity recoverer
  VorticitySmoother<ELEMENT>*  Vorticity_recoverer_pt;
 
+ /// Uniform mesh
+ RefineableRectangularQuadMesh<ELEMENT>* Uniform_mesh_pt;
+
 }; // end of problem_class
 
 
@@ -306,6 +309,12 @@ AnneProblem<ELEMENT>::AnneProblem()
  mesh_pt() = 
   new RefineableRectangularQuadMesh<ELEMENT>(nx,ny,x_min,x_max,y_min,y_max,
                                              time_stepper_pt());
+
+ // Now create a uniform mesh
+ Uniform_mesh_pt = 
+  new RefineableRectangularQuadMesh<ELEMENT>(3*nx,3*ny,x_min,x_max,y_min,y_max,
+                                             time_stepper_pt());
+ 
 
  // Squash it?
  if (CommandLineArgs::command_line_flag_has_been_set("--percentage_of_elements_in_bl")||
@@ -570,6 +579,23 @@ void AnneProblem<ELEMENT>::check_smoothed_vorticity(DocInfo& doc_info)
            << "\"Error(d^3vort/dxdy^2)\","
            << "\"Error(d^3vort/dy^3)\","
            << "\"Area\"\n";
+
+ ofstream uniform_some_file;
+ sprintf(filename,"%s/uniform_vorticity_convergence.dat",
+         doc_info.directory().c_str());
+ uniform_some_file.open(filename);
+ uniform_some_file << "VARIABLES=\"nel\",\"sqrt(1/nel)\","
+                   << "\"Error(vort)\","
+                   << "\"Error(dvort/dx)\","
+                   << "\"Error(dvort/dy)\","
+                   << "\"Error(d^2vort/dx^2)\","
+                   << "\"Error(d^2vort/dxdy)\","
+                   << "\"Error(d^2vort/dy^2)\","
+                   << "\"Error(d^3vort/dx^3)\","
+                   << "\"Error(d^3vort/dx^2dy)\","
+                   << "\"Error(d^3vort/dxdy^2)\","
+                   << "\"Error(d^3vort/dy^3)\","
+                   << "\"Area\"\n";
  
  // Uniform mesh refinements
  unsigned n=3; // hierher
@@ -581,6 +607,74 @@ void AnneProblem<ELEMENT>::check_smoothed_vorticity(DocInfo& doc_info)
    // Smooth it!
    Vorticity_recoverer_pt->recover_vorticity(mesh_pt());
    
+   // Project current solution onto uniform mesh
+   //-------------------------------------------
+   {
+    ProjectionProblem<ELEMENT>* project_problem_pt=
+     new ProjectionProblem<ELEMENT>;
+    
+    // Set the mesh used for the projection object
+    project_problem_pt->mesh_pt()=Uniform_mesh_pt;
+    
+    // Do the projection
+    project_problem_pt->project(mesh_pt());
+    
+    // Reconstruct smooth vorticity
+    Vorticity_recoverer_pt->recover_vorticity(Uniform_mesh_pt);
+    
+    //Loop over the elements to fake build
+    unsigned n_el = Uniform_mesh_pt->nelement();
+    for(unsigned e=0;e<n_el;e++)
+     {
+      //Cast to a fluid element
+      ELEMENT *el_pt = dynamic_cast<ELEMENT*>(Uniform_mesh_pt->element_pt(e));
+      
+      //Set the Reynolds number
+      el_pt->re_pt() = &Global_Parameters::Re;   
+      el_pt->re_st_pt() = &Global_Parameters::Re;
+      
+      // Set exact solution for vorticity and derivs (for validation)
+      el_pt->exact_vorticity_fct_pt()=&Global_Parameters::synthetic_vorticity;
+      
+      // Pin smoothed vorticity
+      el_pt->pin_smoothed_vorticity();
+     }
+    
+    // Output for uniform solution
+    ofstream some_file;
+    char filename[100];
+    
+    // Number of plot points
+    unsigned npts=5; 
+    
+    // Output solution 
+    sprintf(filename,"%s/uniform_soln%i.dat",doc_info.directory().c_str(),
+            doc_info.number());
+    some_file.open(filename);
+    Uniform_mesh_pt->output(some_file,npts);
+    some_file.close();
+    
+    // Output analytical vorticity and derivs -- uses fake (zero) data for
+    // veloc and pressure
+    sprintf(filename,
+            "%s/uniform_analytical_vorticity_and_indicator%i.dat",
+            doc_info.directory().c_str(),
+            doc_info.number());
+    some_file.open(filename);
+    unsigned nel=Uniform_mesh_pt->nelement();
+    for (unsigned e=0;e<nel;e++)
+     {
+      ELEMENT* el_pt=dynamic_cast<ELEMENT*>(Uniform_mesh_pt->element_pt(e));
+      el_pt->output_analytical_veloc_and_vorticity(some_file,npts);
+     }
+    some_file.close();
+   
+    // Delete the projection problem
+    delete project_problem_pt;
+    
+    oomph_info << "projection done" << std::endl;
+   }
+
    // Get error in projection
    double full_area=0.0;
    Vector<double> full_error(10,0.0);
@@ -606,14 +700,51 @@ void AnneProblem<ELEMENT>::check_smoothed_vorticity(DocInfo& doc_info)
    some_file << full_area << " " 
              << std::endl;
    
+
+   // And again for uniform mesh
+   {
+    double full_area=0.0;
+    Vector<double> full_error(10,0.0);
+    unsigned nel=Uniform_mesh_pt->nelement();
+    uniform_some_file << nel << " " << sqrt(1.0/double(nel)) << " ";
+    for (unsigned e=0;e<nel;e++)
+     {
+      ELEMENT* el_pt=dynamic_cast<ELEMENT*>(Uniform_mesh_pt->element_pt(e));
+      double size=el_pt->size();
+      full_area+=size;
+      for (unsigned i=0;i<10;i++)
+       {
+        double el_error=el_pt->vorticity_error_squared(i);
+        full_error[i]+=el_error;
+       }
+     }
+    
+    for (unsigned i=0;i<10;i++)
+     {
+      uniform_some_file << sqrt(full_error[i]) << " ";
+     }
+    
+    uniform_some_file << full_area << " " 
+              << std::endl;
+   }
+
+
+
+
+
    doc_solution(doc_info);
    doc_info.number()++;
 
    // Refine 
-   if (ii!=(n-1)) refine_uniformly();
+   if (ii!=(n-1))
+    {
+     refine_uniformly();
+     Uniform_mesh_pt->refine_uniformly();
+    }
   }
  
  some_file.close();
+ uniform_some_file.close();
  
  // Done!
  exit(0);
@@ -666,7 +797,7 @@ int main(int argc, char* argv[])
  doc_info.set_directory("RESLT");
 
  //Set up problem
- AnneProblem<VorticitySmootherElement<RefineableQTaylorHoodElement<2> > > 
+ AnneProblem<VorticitySmootherElement<ProjectableTaylorHoodElement<RefineableQTaylorHoodElement<2> > > > 
   problem;
   
  // Check vorticity smoothing then stop
