@@ -20,7 +20,7 @@ cp anne.cc $dir
 
 # Run the bastard
 echo "Running..."
-./anne --y_bl 3 --x_mid 4.5 --use_oomph_gmres > $dir/OUTPUT 
+./anne --use_oomph_gmres > $dir/OUTPUT 
 echo "...done"
 
 # Post-process
