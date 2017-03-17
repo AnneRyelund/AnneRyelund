@@ -1,3 +1,4 @@
+
 #! /bin/bash
 
 # Make the thing
@@ -20,7 +21,9 @@ cp anne.cc $dir
 
 # Run the bastard
 echo "Running..."
-./anne --validate_projection > $dir/OUTPUT 
+./anne --validate_projection --percentage_of_elements_in_bl 50.0 --y_bl 0.1 > $dir/OUTPUT 
+
+
 echo "...done"
 
 # Post-process
@@ -29,6 +32,10 @@ oomph-convert -z analytical_vorticity_and_indicator*.dat
 makePvd analytical_vorticity_and_indicator analytical_vorticity_and_indicator.pvd
 oomph-convert soln*.dat 
 makePvd soln soln.pvd
+oomph-convert -z uniform_analytical_vorticity_and_indicator*.dat 
+makePvd uniform_analytical_vorticity_and_indicator uniform_analytical_vorticity_and_indicator.pvd
+oomph-convert uniform_soln*.dat 
+makePvd uniform_soln uniform_soln.pvd
 
 cd ..
 
@@ -37,6 +44,7 @@ echo " "
 echo "Done! Go to directory $dir and animate the validation with "
 echo " "
 echo "   paraview --state=../vorticity_convergence.pvsm"
+echo "   paraview --state=../uniform_vorticity_convergence.pvsm"
 echo " "
 echo "and/or "
 echo " "

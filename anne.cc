@@ -58,25 +58,39 @@ namespace Global_Parameters
  /// Height of computational domain
  double Height=5.13;
 
- /// Number of elements in x-direction
- unsigned Nx=30;
 
- /// Number of elements in y-direction
- unsigned Ny=30;
 
- /// Thickness of "boundary layer" region into which we squash
- /// the elements
- double Y_bl=3;
+
+ // Mesh parameters:
+ //-----------------
+
+ // The parameters below work fine for basic layout.
+ // Overall number of elements can be controlled by scalng
+ // factor
+ 
+ /// Overall scaling factor for number of elements
+ double Mesh_scaling_factor=0.5;
 
  /// Percentage of elements squashed into "boundary layer"
- double Percentage_of_elements_in_bl=80.0;
+ double Percentage_of_elements_in_bl=50.0;
+
+ /// Exponential factor mesh squashing in BL region
+ double Alpha_bl=5.0;
+
+ // Mesh spacing in vortex region
+ double H_vortex=0.05;
+
+ // Mesh spacing in vortex region
+ double Hx_outside_vortex=0.2;
 
  /// Thickness of the middle region into which we squash
  /// the elements
- double X_mid = 4.5;
+ double X_mid=4.5;
 
- /// Percentage of elements squashed into the middle region
- double Percentage_of_elements_in_mid=80.0;	
+
+
+ // Parameters for vortex
+ //----------------------
 
  /// x position of vortex
  double X_vortex=0.0;
@@ -85,16 +99,12 @@ namespace Global_Parameters
  double Y_vortex=1.0;
 
  /// Uniform background flow
- double k=0.02812;
+ double K=0.02812;
 
  /// Initial condition for velocity
  void initial_condition(const Vector<double>& x, Vector<double>& u)
  {
-
-  // hierher Anne: Update this!
-  //               (1) All these numbers must have some relation to
-  //                   the Reynolds number (I just set them to 1)
-  //               (2) Add uniform background flow
+  // Parameters from Morten's thesis
   double a=0.3;
   double omega_0=-1.25;
 
@@ -110,7 +120,7 @@ namespace Global_Parameters
   double theta2=atan2(x[1]+Y_vortex,x[0]-X_vortex);
   double u_theta2=omega_0*a*a/(2.0*r2)*(1.0-exp(-r2*r2/(a*a)));
 
-  u[0]=-u_theta1*sin(theta1)+u_theta2*sin(theta2)+k;
+  u[0]=-u_theta1*sin(theta1)+u_theta2*sin(theta2)+K;
   u[1]= u_theta1*cos(theta1)-u_theta2*cos(theta2);
  }
 
@@ -217,7 +227,7 @@ namespace Global_Parameters
 /// Problem class for Anne's MSc problem
 //======================================================================
 template<class ELEMENT>
-class AnneProblem : public Problem
+class AnneProblem : public Problem, public ClassThatCanCallProjection
 {
 public:
 
@@ -289,11 +299,13 @@ AnneProblem<ELEMENT>::AnneProblem()
  //Allocate the timestepper
  add_time_stepper_pt(new BDF<2>); 
 
- // Number of elements in x direction
- unsigned nx=Global_Parameters::Nx;
+ // Number of elements in x direction.
+ // purely nominal initial value
+ unsigned nx=10;
 
  // Number of elements in y direction
- unsigned ny=Global_Parameters::Ny;
+ // purely nominal initial value
+ unsigned ny=10; 
 
  // Left end of computational domain
  double x_min=Global_Parameters::X_left;
@@ -307,74 +319,115 @@ AnneProblem<ELEMENT>::AnneProblem()
  // Height of computational domain
  double y_max=Global_Parameters::Height;
  
+ // Mesh spacing in vortex region
+ double dy_vortex=Global_Parameters::H_vortex;
+
+ // Width of central region containing vortex
+ double x_mid=Global_Parameters::X_mid;
+
+ // Make approximately square elements in vortex region
+ // make sure it's an even number
+ unsigned nx_mid=2*unsigned(0.5*x_mid/dy_vortex);
+
+ // Mesh spacing in side bits -- make sure that in total we
+ // have an even number of elements
+ double n_side=2*unsigned(0.5*(x_max-x_min-x_mid)/
+                          Global_Parameters::Hx_outside_vortex);
+
+ // Mesh squashing exponential factor
+ double alpha=Global_Parameters::Alpha_bl;
+
+ // Identify point in current mesh where we switch from exponential
+ // to uniform spacing
+ double percentage_el_in_bl=Global_Parameters::Percentage_of_elements_in_bl;
+ unsigned ny_bl=unsigned(double(ny)*percentage_el_in_bl/100.0);
+ double y_bl_orig=double(ny_bl)/double(ny)*y_max;
+
+
+ // Constants related to mapping functions
+ double dfdy_at_y_bl_orig=alpha*exp(alpha)/(y_bl_orig*(exp(alpha)-1.0));
+ double normalising_factor=1.0+dfdy_at_y_bl_orig*(y_max-y_bl_orig);
+
+ oomph_info << "outer edge of exponential region: " 
+            << y_max/normalising_factor << std::endl;
+
+ // Now re-assign the actual number of elements in y direction
+ oomph_info << "Changed ny from: " << ny;
+ double current_dy_vortex=(y_max-y_max/normalising_factor)/
+  (double(ny)*(100.0-percentage_el_in_bl)/100.0);
+ ny*=current_dy_vortex/dy_vortex;
+ oomph_info << " to: " << ny << std::endl;
+
+ // Scale it
+ nx_mid=2*unsigned(0.5*double(nx_mid)*Global_Parameters::Mesh_scaling_factor);
+ n_side=2*unsigned(0.5*double(n_side)*Global_Parameters::Mesh_scaling_factor);
+ ny=unsigned(double(ny)*Global_Parameters::Mesh_scaling_factor);
+                  
+ // How many in total?
+ nx=nx_mid+n_side;
+
+ oomph_info << "And finally building mesh with " << nx << " x " << ny 
+            << " elements." << std::endl;
+
  //Now create the mesh 
  mesh_pt() = 
   new RefineableRectangularQuadMesh<ELEMENT>(nx,ny,x_min,x_max,y_min,y_max,
                                              time_stepper_pt());
 
- // Squash it to boundary layer?
- if (CommandLineArgs::command_line_flag_has_been_set("--percentage_of_elements_in_bl")||
-     CommandLineArgs::command_line_flag_has_been_set("--y_bl"))
-{
-   oomph_info << "Squashing " << Global_Parameters::Percentage_of_elements_in_bl
-              << " % of elements in \"boundary layer\" of thickness " 
-              << Global_Parameters::Y_bl << std::endl;
-   double y_bl=Global_Parameters::Y_bl;
-   double percentage_el_in_bl=Global_Parameters::Percentage_of_elements_in_bl;
-   unsigned ny_bl=unsigned(double(ny)*percentage_el_in_bl/100.0);
-   double y_bl_orig=double(ny_bl)/double(ny)*y_max;
-   unsigned nnod=mesh_pt()->nnode();
-   for (unsigned j=0;j<nnod;j++)
-    {
-     double y=mesh_pt()->node_pt(j)->x(1);
-     if (y<=y_bl_orig)
-      {
-       mesh_pt()->node_pt(j)->x(1)=y_bl*y/y_bl_orig;
-      }
-     else
-      {
-       mesh_pt()->node_pt(j)->x(1)=y_bl+
-        (y_max-y_bl)*(y-y_bl_orig)/(y_max-y_bl_orig);
-      }
-    }
-   }
+ // Adjust nodes vertically
+ unsigned nnod=mesh_pt()->nnode();
+ for (unsigned j=0;j<nnod;j++)
+  {
+   double y=mesh_pt()->node_pt(j)->x(1);
 
-// Squash it to middle region?
-   if (CommandLineArgs::command_line_flag_has_been_set("--percentage_of_elements_in_mid")|| 
-    CommandLineArgs::command_line_flag_has_been_set("--x_mid"))
-   {  
-   oomph_info << "Squashing " << Global_Parameters::Percentage_of_elements_in_mid
-              << " % of elements in middle region of thickness " 
-              << Global_Parameters::X_mid << std::endl;
-   double x_mid=Global_Parameters::X_mid;
-   double percentage_el_in_mid=Global_Parameters::Percentage_of_elements_in_mid;
-   unsigned nx_mid=unsigned(double(nx)*percentage_el_in_mid/100.0);
-   double x_left_orig=-(double(nx_mid)/double(nx))*(x_max-x_min)/2.0;
-   double x_right_orig=-x_left_orig;
-   unsigned no_nod=mesh_pt()->nnode();
-   for (unsigned j=0;j<no_nod;j++)
+   if (y<=y_bl_orig)
     {
-     double x=mesh_pt()->node_pt(j)->x(0);
-     if (x<=x_right_orig && x>=x_left_orig)
-      {
-       mesh_pt()->node_pt(j)->x(0)=x_mid*x/(x_right_orig-x_left_orig);
-      }
-     else if (x<=x_left_orig)
-      {
-       mesh_pt()->node_pt(j)->x(0)=-x_mid/2.0+
-        (x_min+x_mid/2.0)*(x-x_left_orig)/(x_min-x_left_orig);
-      }
-     else 
-     {
-       mesh_pt()->node_pt(j)->x(0)=x_mid/2.0+
-        (x_max-x_mid/2.0)*(x-x_right_orig)/(x_max-x_right_orig);
-      }
+     mesh_pt()->node_pt(j)->x(1)=y_max*(exp(alpha*(y/y_bl_orig))-1.0)/(exp(alpha)-1.0)/normalising_factor;
+    }
+   else 
+    {
+     mesh_pt()->node_pt(j)->x(1)=y_max*
+      (1.0+dfdy_at_y_bl_orig*(y-y_bl_orig))/normalising_factor;
     }
   }
+ 
+ // Squash it to middle region
+ double dx_uniform=(x_max-x_min)/double(nx);
+ double x_left_orig=-double(nx_mid/2)*dx_uniform;
+ double x_right_orig=-x_left_orig;
+ unsigned no_nod=mesh_pt()->nnode();
+ for (unsigned j=0;j<no_nod;j++)
+  {
+   double x=mesh_pt()->node_pt(j)->x(0);
+   if (x<=x_right_orig && x>=x_left_orig)
+    {
+     mesh_pt()->node_pt(j)->x(0)=x_mid*x/(x_right_orig-x_left_orig);
+    }
+   else if (x<=x_left_orig)
+    {
+     mesh_pt()->node_pt(j)->x(0)=-x_mid/2.0+
+      (x_min+x_mid/2.0)*(x-x_left_orig)/(x_min-x_left_orig);
+    }
+   else 
+    {
+     mesh_pt()->node_pt(j)->x(0)=x_mid/2.0+
+      (x_max-x_mid/2.0)*(x-x_right_orig)/(x_max-x_right_orig);
+    }
+  }
+ 
+ // Output mesh
+ ofstream some_file;
+ char filename[100]; 
+  sprintf(filename,"mesh.dat");
+ some_file.open(filename);
+ unsigned npts=2;
+ mesh_pt()->output(some_file,npts);
+ some_file.close();
 
  // Check enumeration of boundaries
  mesh_pt()->output_boundaries("boundaries.dat");
 
+ 
  // Set the boundary conditions for this problem: All nodes are
  // free by default -- just pin the ones that have Dirichlet conditions
  // here
@@ -384,15 +437,15 @@ AnneProblem<ELEMENT>::AnneProblem()
    unsigned num_nod=mesh_pt()->nboundary_node(ibound);
    for (unsigned inod=0;inod<num_nod;inod++)
     {
-     // Imposed velocity on top (2) and left (3) 
-     if ((ibound==2)||(ibound==3))
+     // Imposed velocity on top (2)
+     if ((ibound==2)) 
       {
        mesh_pt()->boundary_node_pt(ibound,inod)->pin(0);
        mesh_pt()->boundary_node_pt(ibound,inod)->pin(1);
       }
-     // Horizontal outflow on the left (1) and no penetration
+     // Horizontal outflow on the left (3) and right (1) and no penetration
      // at bottom (0)
-     else if ((ibound==0)||(ibound==1))
+     else if ((ibound==0)||(ibound==1)|| (ibound==3) ) 
       {
        mesh_pt()->boundary_node_pt(ibound,inod)->pin(1);
       }
@@ -440,8 +493,55 @@ AnneProblem<ELEMENT>::AnneProblem()
    Prec_pt=new NavierStokesSchurComplementPreconditioner(this);
    Prec_pt->set_navier_stokes_mesh(this->mesh_pt());  
    Solver_pt->preconditioner_pt()=Prec_pt;
+
+
+// No good with squashed elements
+
+// #ifdef OOMPH_HAS_HYPRE
+
+//    bool use_hypre_for_pressure=true;
+//    if (use_hypre_for_pressure)
+//     {
+//      P_matrix_preconditioner_pt = new HyprePreconditioner;
+     
+//      // Set parameters for use as preconditioner on Poisson-type problem
+//      Hypre_default_settings::set_defaults_for_2D_poisson_problem(
+//       static_cast<HyprePreconditioner*>(P_matrix_preconditioner_pt));
+     
+//      // Use Hypre for the Schur complement block
+//      Prec_pt->set_p_preconditioner(P_matrix_preconditioner_pt);
+     
+//      // Shut up!
+//      static_cast<HyprePreconditioner*>(P_matrix_preconditioner_pt)->
+//       disable_doc_time();
+//     }
+
+// #endif
+
+
+
+   // Create internal preconditioners used on momentum block
+   //--------------------------------------------------------
+   bool use_block_diagonal_for_momentum=true;
+   if (use_block_diagonal_for_momentum)
+    {
+     F_matrix_preconditioner_pt = 
+      new BlockDiagonalPreconditioner<CRDoubleMatrix>;
+     
+// #ifdef OOMPH_HAS_HYPRE
+//      if (use_hypre_for_momentum)
+//       {
+//        dynamic_cast<BlockDiagonalPreconditioner<CRDoubleMatrix>* >
+//         (F_matrix_preconditioner_pt)->set_subsidiary_preconditioner_function
+//         (Hypre_Subsidiary_Preconditioner_Helper::set_hypre_preconditioner);
+//       }
+// #endif
+     
+     // Use Hypre for momentum block 
+     Prec_pt->set_f_preconditioner(F_matrix_preconditioner_pt);
+    }
+
   }
- 
  
  
 } // end of constructor
@@ -489,7 +589,6 @@ void AnneProblem<ELEMENT>::doc_solution(DocInfo& doc_info)
     }
    some_file.close();
   }
-
 
 } // end_of_doc_solution   
 
@@ -541,13 +640,13 @@ void AnneProblem<ELEMENT>::impose_no_slip_on_bottom_boundary()
 {
 
 
- // Pin horizontal velocity at bottom boundary
+ // Pin horizontal velocity at bottom boundary and apply correction
  unsigned ibound=0;
  unsigned num_nod=mesh_pt()->nboundary_node(ibound);
  for (unsigned inod=0;inod<num_nod;inod++)
   {
    mesh_pt()->boundary_node_pt(ibound,inod)->pin(0);
-   mesh_pt()->boundary_node_pt(ibound,inod)->set_value(0,Global_Parameters::k);
+   mesh_pt()->boundary_node_pt(ibound,inod)->set_value(0,Global_Parameters::K);
   }
 
  // Re-assign equation numbers
@@ -557,8 +656,7 @@ void AnneProblem<ELEMENT>::impose_no_slip_on_bottom_boundary()
  assign_eqn_numbers();
  oomph_info << "ndofs after applying no slip at bottom boundary : "
             << ndof() << std::endl << std::endl;
-
-
+ 
 }
 
 
@@ -608,9 +706,26 @@ void AnneProblem<ELEMENT>::check_smoothed_vorticity(DocInfo& doc_info)
            << "\"Error(d^3vort/dxdy^2)\","
            << "\"Error(d^3vort/dy^3)\","
            << "\"Area\"\n";
+
+ ofstream uniform_some_file;
+ sprintf(filename,"%s/uniform_vorticity_convergence.dat",
+         doc_info.directory().c_str());
+ uniform_some_file.open(filename);
+ uniform_some_file << "VARIABLES=\"nel\",\"sqrt(1/nel)\","
+                   << "\"Error(vort)\","
+                   << "\"Error(dvort/dx)\","
+                   << "\"Error(dvort/dy)\","
+                   << "\"Error(d^2vort/dx^2)\","
+                   << "\"Error(d^2vort/dxdy)\","
+                   << "\"Error(d^2vort/dy^2)\","
+                   << "\"Error(d^3vort/dx^3)\","
+                   << "\"Error(d^3vort/dx^2dy)\","
+                   << "\"Error(d^3vort/dxdy^2)\","
+                   << "\"Error(d^3vort/dy^3)\","
+                   << "\"Area\"\n";
  
  // Uniform mesh refinements
- unsigned n=3; // hierher
+ unsigned n=3;
  for (unsigned ii=0;ii<n;ii++)
   {      
    // Assign synthetic velocity field
@@ -644,14 +759,19 @@ void AnneProblem<ELEMENT>::check_smoothed_vorticity(DocInfo& doc_info)
    some_file << full_area << " " 
              << std::endl;
    
+
    doc_solution(doc_info);
    doc_info.number()++;
 
    // Refine 
-   if (ii!=(n-1)) refine_uniformly();
+   if (ii!=(n-1))
+    {
+     refine_uniformly();
+    }
   }
  
  some_file.close();
+ uniform_some_file.close();
  
  // Done!
  exit(0);
@@ -665,6 +785,10 @@ void AnneProblem<ELEMENT>::check_smoothed_vorticity(DocInfo& doc_info)
 int main(int argc, char* argv[]) 
 {
 
+// #ifdef OOMPH_HAS_MPI
+//  MPI_Helpers::init(argc,argv);
+// #endif
+
  // Store command line arguments
  CommandLineArgs::setup(argc,argv);
 
@@ -675,25 +799,10 @@ int main(int argc, char* argv[])
  CommandLineArgs::specify_command_line_flag("--re",
                                             &Global_Parameters::Re);
 
- // Thickness of "boundary layer" region into which we squash
- // the elements
- CommandLineArgs::specify_command_line_flag("--y_bl",
-                                            &Global_Parameters::Y_bl);
-
- /// Percentage of elements squashed into "boundary layer"
+ // Scaling factor for number of elements in mesh
  CommandLineArgs::specify_command_line_flag(
-  "--percentage_of_elements_in_bl",
-  &Global_Parameters:: Percentage_of_elements_in_bl);
-
- /// Thickness of the middle region into which we squash
- /// the elements
- CommandLineArgs::specify_command_line_flag("--x_mid",
-                                           &Global_Parameters::X_mid);
-
- /// Percentage of elements squashed into the middle region
- CommandLineArgs::specify_command_line_flag(
-  "--percentage_of_elements_in_mid",
- &Global_Parameters:: Percentage_of_elements_in_mid);
+  "--mesh_scaling_factor",
+  &Global_Parameters::Mesh_scaling_factor);
 
  // Use gmres?
  CommandLineArgs::specify_command_line_flag("--use_oomph_gmres");
@@ -709,7 +818,7 @@ int main(int argc, char* argv[])
  doc_info.set_directory("RESLT");
 
  //Set up problem
- AnneProblem<VorticitySmootherElement<RefineableQTaylorHoodElement<2> > > 
+ AnneProblem<VorticitySmootherElement<ProjectableTaylorHoodElement<RefineableQTaylorHoodElement<2> > > > 
   problem;
   
  // Check vorticity smoothing then stop
@@ -772,6 +881,11 @@ int main(int argc, char* argv[])
    doc_info.number()++;
   }
 
+
+
+// #ifdef OOMPH_HAS_MPI
+// MPI_Helpers::finalize();
+// #endif
 
 
 } // end of main
