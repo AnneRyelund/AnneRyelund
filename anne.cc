@@ -41,6 +41,21 @@ using namespace std;
 using namespace oomph;
 
 
+#ifdef OOMPH_HAS_MUMPS
+//=============================================================================
+/// helper method for the block diagonal F block preconditioner to allow 
+/// mumps to be used for as a subsidiary block preconditioner
+//=============================================================================
+namespace Mumps_Subsidiary_Preconditioner_Helper
+{
+ Preconditioner* set_mumps_preconditioner()
+ {
+  return new NewMumpsPreconditioner;
+ }
+}
+#endif
+
+
 //===start_of_namespace=================================================
 /// Namespace for global parameters
 //======================================================================
@@ -227,7 +242,7 @@ namespace Global_Parameters
 /// Problem class for Anne's MSc problem
 //======================================================================
 template<class ELEMENT>
-class AnneProblem : public Problem, public ClassThatCanCallProjection
+class AnneProblem : public Problem
 {
 public:
 
@@ -495,6 +510,16 @@ AnneProblem<ELEMENT>::AnneProblem()
    Solver_pt->preconditioner_pt()=Prec_pt;
 
 
+#ifdef OOMPH_HAS_MUMPS
+
+   // Schur complement preconditioner
+   P_matrix_preconditioner_pt = new NewMumpsPreconditioner;
+   Prec_pt->set_p_preconditioner(P_matrix_preconditioner_pt);
+
+#endif
+
+
+
 // No good with squashed elements
 
 // #ifdef OOMPH_HAS_HYPRE
@@ -527,7 +552,16 @@ AnneProblem<ELEMENT>::AnneProblem()
     {
      F_matrix_preconditioner_pt = 
       new BlockDiagonalPreconditioner<CRDoubleMatrix>;
-     
+
+#ifdef OOMPH_HAS_MUMPS
+
+     // Use mumps for block solves
+     dynamic_cast<BlockDiagonalPreconditioner<CRDoubleMatrix>* >
+      (F_matrix_preconditioner_pt)->set_subsidiary_preconditioner_function
+      (Mumps_Subsidiary_Preconditioner_Helper::set_mumps_preconditioner);
+
+#endif
+
 // #ifdef OOMPH_HAS_HYPRE
 //      if (use_hypre_for_momentum)
 //       {
@@ -785,9 +819,9 @@ void AnneProblem<ELEMENT>::check_smoothed_vorticity(DocInfo& doc_info)
 int main(int argc, char* argv[]) 
 {
 
-// #ifdef OOMPH_HAS_MPI
-//  MPI_Helpers::init(argc,argv);
-// #endif
+#ifdef OOMPH_HAS_MPI
+ MPI_Helpers::init(argc,argv);
+#endif
 
  // Store command line arguments
  CommandLineArgs::setup(argc,argv);
@@ -883,9 +917,9 @@ int main(int argc, char* argv[])
 
 
 
-// #ifdef OOMPH_HAS_MPI
-// MPI_Helpers::finalize();
-// #endif
+#ifdef OOMPH_HAS_MPI
+MPI_Helpers::finalize();
+#endif
 
 
 } // end of main
