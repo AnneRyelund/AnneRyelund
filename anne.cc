@@ -158,11 +158,18 @@ namespace Global_Parameters
                         double& vort,
                         Vector<double>& dvort_dx,
                         Vector<double>& dvort_dxdy,
-                        Vector<double>& dvort_dxdxdy)
+                        Vector<double>& dvort_dxdxdy,
+                        Vector<double>& dveloc_dx)
  {
   double omega_x=2.0*MathematicalConstants::Pi/(-X_left+X_right);
   double phi=2.0*MathematicalConstants::Pi*X_left/(-X_left+X_right);
   double omega_y=2*MathematicalConstants::Pi/Height;
+
+  dveloc_dx[0]= omega_x*cos(omega_x*x[0]+phi)*cos(omega_y*x[1]);
+  dveloc_dx[1]=-omega_y*sin(omega_x*x[0]+phi)*sin(omega_y*x[1]);
+
+  dveloc_dx[2]=omega_x*cos(omega_x*x[0]+phi)*sin(omega_y*x[1]);
+  dveloc_dx[3]=omega_y*sin(omega_x*x[0]+phi)*cos(omega_y*x[1]);
 
   vort=
    omega_y*sin(omega_x*x[0]+phi)*sin(omega_y*x[1])+
@@ -221,13 +228,15 @@ namespace Global_Parameters
                           double& vort,
                           Vector<double>& dvort_dx,
                           Vector<double>& dvort_dxdy,
-                          Vector<double>& dvort_dxdxdy)
+                          Vector<double>& dvort_dxdxdy,
+                          Vector<double>& dveloc_dx)
  {
   sin_cos_vorticity(xx,
                     vort,                        
                     dvort_dx,
                     dvort_dxdy,
-                    dvort_dxdxdy);
+                    dvort_dxdxdy,
+                    dveloc_dx);
  }
 
 
@@ -334,6 +343,9 @@ AnneProblem<ELEMENT>::AnneProblem()
  // Height of computational domain
  double y_max=Global_Parameters::Height;
  
+ // Parameters for mesh squashing:
+ //-------------------------------
+
  // Mesh spacing in vortex region
  double dy_vortex=Global_Parameters::H_vortex;
 
@@ -381,6 +393,14 @@ AnneProblem<ELEMENT>::AnneProblem()
  // How many in total?
  nx=nx_mid+n_side;
 
+
+ // Ignore all this for vorticity convergence check
+ if (CommandLineArgs::command_line_flag_has_been_set("--validate_projection"))
+  {
+   nx=10;
+   ny=10;
+  }
+
  oomph_info << "And finally building mesh with " << nx << " x " << ny 
             << " elements." << std::endl;
 
@@ -389,47 +409,54 @@ AnneProblem<ELEMENT>::AnneProblem()
   new RefineableRectangularQuadMesh<ELEMENT>(nx,ny,x_min,x_max,y_min,y_max,
                                              time_stepper_pt());
 
- // Adjust nodes vertically
- unsigned nnod=mesh_pt()->nnode();
- for (unsigned j=0;j<nnod;j++)
+ // No squashing if projection validation
+ if (!CommandLineArgs::command_line_flag_has_been_set("--validate_projection"))
   {
-   double y=mesh_pt()->node_pt(j)->x(1);
+   // Adjust nodes vertically
+   unsigned nnod=mesh_pt()->nnode();
+   for (unsigned j=0;j<nnod;j++)
+    {
+     double y=mesh_pt()->node_pt(j)->x(1);
+     
+     if (y<=y_bl_orig)
+      {
+       mesh_pt()->node_pt(j)->x(1)=
+        y_max*(exp(alpha*(y/y_bl_orig))-1.0)/(exp(alpha)-1.0)/
+        normalising_factor;
+      }
+     else 
+      {
+       mesh_pt()->node_pt(j)->x(1)=y_max*
+        (1.0+dfdy_at_y_bl_orig*(y-y_bl_orig))/normalising_factor;
+      }
+    }
+   
+   // Squash it to middle region
+   double dx_uniform=(x_max-x_min)/double(nx);
+   double x_left_orig=-double(nx_mid/2)*dx_uniform;
+   double x_right_orig=-x_left_orig;
+   unsigned no_nod=mesh_pt()->nnode();
+   for (unsigned j=0;j<no_nod;j++)
+    {
+     double x=mesh_pt()->node_pt(j)->x(0);
+     if (x<=x_right_orig && x>=x_left_orig)
+      {
+       mesh_pt()->node_pt(j)->x(0)=x_mid*x/(x_right_orig-x_left_orig);
+      }
+     else if (x<=x_left_orig)
+      {
+       mesh_pt()->node_pt(j)->x(0)=-x_mid/2.0+
+        (x_min+x_mid/2.0)*(x-x_left_orig)/(x_min-x_left_orig);
+      }
+     else 
+      {
+       mesh_pt()->node_pt(j)->x(0)=x_mid/2.0+
+        (x_max-x_mid/2.0)*(x-x_right_orig)/(x_max-x_right_orig);
+      }
+    }
+  }
+ 
 
-   if (y<=y_bl_orig)
-    {
-     mesh_pt()->node_pt(j)->x(1)=y_max*(exp(alpha*(y/y_bl_orig))-1.0)/(exp(alpha)-1.0)/normalising_factor;
-    }
-   else 
-    {
-     mesh_pt()->node_pt(j)->x(1)=y_max*
-      (1.0+dfdy_at_y_bl_orig*(y-y_bl_orig))/normalising_factor;
-    }
-  }
- 
- // Squash it to middle region
- double dx_uniform=(x_max-x_min)/double(nx);
- double x_left_orig=-double(nx_mid/2)*dx_uniform;
- double x_right_orig=-x_left_orig;
- unsigned no_nod=mesh_pt()->nnode();
- for (unsigned j=0;j<no_nod;j++)
-  {
-   double x=mesh_pt()->node_pt(j)->x(0);
-   if (x<=x_right_orig && x>=x_left_orig)
-    {
-     mesh_pt()->node_pt(j)->x(0)=x_mid*x/(x_right_orig-x_left_orig);
-    }
-   else if (x<=x_left_orig)
-    {
-     mesh_pt()->node_pt(j)->x(0)=-x_mid/2.0+
-      (x_min+x_mid/2.0)*(x-x_left_orig)/(x_min-x_left_orig);
-    }
-   else 
-    {
-     mesh_pt()->node_pt(j)->x(0)=x_mid/2.0+
-      (x_max-x_mid/2.0)*(x-x_right_orig)/(x_max-x_right_orig);
-    }
-  }
- 
  // Output mesh
  ofstream some_file;
  char filename[100]; 
@@ -441,7 +468,6 @@ AnneProblem<ELEMENT>::AnneProblem()
 
  // Check enumeration of boundaries
  mesh_pt()->output_boundaries("boundaries.dat");
-
  
  // Set the boundary conditions for this problem: All nodes are
  // free by default -- just pin the ones that have Dirichlet conditions
@@ -739,27 +765,14 @@ void AnneProblem<ELEMENT>::check_smoothed_vorticity(DocInfo& doc_info)
            << "\"Error(d^3vort/dx^2dy)\","
            << "\"Error(d^3vort/dxdy^2)\","
            << "\"Error(d^3vort/dy^3)\","
+           << "\"Error(du/dx)\","
+           << "\"Error(du/dy)\","
+           << "\"Error(dv/dx)\","
+           << "\"Error(dv/dy)\","
            << "\"Area\"\n";
-
- ofstream uniform_some_file;
- sprintf(filename,"%s/uniform_vorticity_convergence.dat",
-         doc_info.directory().c_str());
- uniform_some_file.open(filename);
- uniform_some_file << "VARIABLES=\"nel\",\"sqrt(1/nel)\","
-                   << "\"Error(vort)\","
-                   << "\"Error(dvort/dx)\","
-                   << "\"Error(dvort/dy)\","
-                   << "\"Error(d^2vort/dx^2)\","
-                   << "\"Error(d^2vort/dxdy)\","
-                   << "\"Error(d^2vort/dy^2)\","
-                   << "\"Error(d^3vort/dx^3)\","
-                   << "\"Error(d^3vort/dx^2dy)\","
-                   << "\"Error(d^3vort/dxdy^2)\","
-                   << "\"Error(d^3vort/dy^3)\","
-                   << "\"Area\"\n";
  
  // Uniform mesh refinements
- unsigned n=3;
+ unsigned n=5;
  for (unsigned ii=0;ii<n;ii++)
   {      
    // Assign synthetic velocity field
@@ -770,7 +783,7 @@ void AnneProblem<ELEMENT>::check_smoothed_vorticity(DocInfo& doc_info)
    
    // Get error in projection
    double full_area=0.0;
-   Vector<double> full_error(10,0.0);
+   Vector<double> full_error(14,0.0);
    unsigned nel=mesh_pt()->nelement();
    some_file << nel << " " << sqrt(1.0/double(nel)) << " ";
    for (unsigned e=0;e<nel;e++)
@@ -778,14 +791,14 @@ void AnneProblem<ELEMENT>::check_smoothed_vorticity(DocInfo& doc_info)
      ELEMENT* el_pt=dynamic_cast<ELEMENT*>(mesh_pt()->element_pt(e));
      double size=el_pt->size();
      full_area+=size;
-     for (unsigned i=0;i<10;i++)
+     for (unsigned i=0;i<14;i++)
       {
        double el_error=el_pt->vorticity_error_squared(i);
        full_error[i]+=el_error;
       }
     }
    
-   for (unsigned i=0;i<10;i++)
+   for (unsigned i=0;i<14;i++)
     {
      some_file << sqrt(full_error[i]) << " ";
     }
@@ -805,7 +818,6 @@ void AnneProblem<ELEMENT>::check_smoothed_vorticity(DocInfo& doc_info)
   }
  
  some_file.close();
- uniform_some_file.close();
  
  // Done!
  exit(0);

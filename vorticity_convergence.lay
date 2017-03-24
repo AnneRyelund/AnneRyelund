@@ -1,6 +1,6 @@
 #!MC 1410
 $!VarSet |LFDSFN1| = '"RESLT/vorticity_convergence.dat"'
-$!VarSet |LFDSVL1| = '"nel" "sqrt(1/nel)" "Error(vort)" "Error(dvort/dx)" "Error(dvort/dy)" "Error(d^2vort/dx^2)" "Error(d^2vort/dxdy)" "Error(d^2vort/dy^2)" "Error(d^3vort/dx^3)" "Error(d^3vort/dx^2dy)" "Error(d^3vort/dxdy^2)" "Error(d^3vort/dy^3)" "Area"'
+$!VarSet |LFDSVL1| = '"nel" "sqrt(1/nel)" "Error(vort)" "Error(dvort/dx)" "Error(dvort/dy)" "Error(d^2vort/dx^2)" "Error(d^2vort/dxdy)" "Error(d^2vort/dy^2)" "Error(d^3vort/dx^3)" "Error(d^3vort/dx^2dy)" "Error(d^3vort/dxdy^2)" "Error(d^3vort/dy^3)" "Error(du/dx)" "Error(du/dy)" "Error(dv/dx)" "Error(dv/dy)" "Area"'
 $!SETSTYLEBASE FACTORY
 $!PLOTOPTIONS 
   SUBDIVIDEALLCELLS = NO
@@ -66,7 +66,7 @@ $!FRAMENAME  = 'Frame 001'
 $!GLOBALTIME 
   SOLUTIONTIME = 0
 $!DELETELINEMAPS 
-$!ACTIVELINEMAPS  =  [2-11]
+$!ACTIVELINEMAPS  =  [2-7,12-15]
 $!GLOBALLINEPLOT 
   DATALABELS
     {
@@ -77,17 +77,12 @@ $!GLOBALLINEPLOT
     SHOW = YES
     TEXTSHAPE
       {
-      HEIGHT = 1.5
-      }
-    BOX
-      {
-      BOXTYPE = FILLED
-      MARGIN = 0
+      HEIGHT = 2
       }
     XYPOS
       {
-      X = 68.178
-      Y = 99.564
+      X = 46.973
+      Y = 42.963
       }
     }
 $!LINEMAP  [1]
@@ -107,6 +102,7 @@ $!LINEMAP  [1]
     {
     COLOR = RED
     FILLCOLOR = RED
+    LINETHICKNESS = 0.4
     }
   BARCHARTS
     {
@@ -134,6 +130,7 @@ $!LINEMAP  [2]
     {
     COLOR = GREEN
     FILLCOLOR = GREEN
+    LINETHICKNESS = 0.4
     }
   BARCHARTS
     {
@@ -161,6 +158,7 @@ $!LINEMAP  [3]
     {
     COLOR = BLUE
     FILLCOLOR = BLUE
+    LINETHICKNESS = 0.4
     }
   BARCHARTS
     {
@@ -188,6 +186,7 @@ $!LINEMAP  [4]
     {
     COLOR = CUSTOM1
     FILLCOLOR = CUSTOM1
+    LINETHICKNESS = 0.4
     }
   BARCHARTS
     {
@@ -209,14 +208,13 @@ $!LINEMAP  [5]
   LINES
     {
     COLOR = CUSTOM3
-    LINEPATTERN = LONGDASH
-    PATTERNLENGTH = 3
     LINETHICKNESS = 0.4
     }
   SYMBOLS
     {
     COLOR = CUSTOM3
     FILLCOLOR = CUSTOM3
+    LINETHICKNESS = 0.4
     }
   BARCHARTS
     {
@@ -238,14 +236,13 @@ $!LINEMAP  [6]
   LINES
     {
     COLOR = PURPLE
-    LINEPATTERN = LONGDASH
-    PATTERNLENGTH = 3
     LINETHICKNESS = 0.4
     }
   SYMBOLS
     {
     COLOR = PURPLE
     FILLCOLOR = PURPLE
+    LINETHICKNESS = 0.4
     }
   BARCHARTS
     {
@@ -267,14 +264,13 @@ $!LINEMAP  [7]
   LINES
     {
     COLOR = RED
-    LINEPATTERN = LONGDASH
-    PATTERNLENGTH = 3
     LINETHICKNESS = 0.4
     }
   SYMBOLS
     {
     COLOR = RED
     FILLCOLOR = RED
+    LINETHICKNESS = 0.4
     }
   BARCHARTS
     {
@@ -296,13 +292,13 @@ $!LINEMAP  [8]
   LINES
     {
     COLOR = GREEN
-    LINEPATTERN = DASHED
     LINETHICKNESS = 0.4
     }
   SYMBOLS
     {
     COLOR = GREEN
     FILLCOLOR = GREEN
+    LINETHICKNESS = 0.4
     }
   BARCHARTS
     {
@@ -324,13 +320,13 @@ $!LINEMAP  [9]
   LINES
     {
     COLOR = BLUE
-    LINEPATTERN = DASHED
     LINETHICKNESS = 0.4
     }
   SYMBOLS
     {
     COLOR = BLUE
     FILLCOLOR = BLUE
+    LINETHICKNESS = 0.4
     }
   BARCHARTS
     {
@@ -352,13 +348,13 @@ $!LINEMAP  [10]
   LINES
     {
     COLOR = CUSTOM1
-    LINEPATTERN = DASHED
     LINETHICKNESS = 0.4
     }
   SYMBOLS
     {
     COLOR = CUSTOM1
     FILLCOLOR = CUSTOM1
+    LINETHICKNESS = 0.4
     }
   BARCHARTS
     {
@@ -380,13 +376,13 @@ $!LINEMAP  [11]
   LINES
     {
     COLOR = CUSTOM3
-    LINEPATTERN = DASHED
     LINETHICKNESS = 0.4
     }
   SYMBOLS
     {
     COLOR = CUSTOM3
     FILLCOLOR = CUSTOM3
+    LINETHICKNESS = 0.4
     }
   BARCHARTS
     {
@@ -408,11 +404,17 @@ $!LINEMAP  [12]
   LINES
     {
     COLOR = PURPLE
+    LINETHICKNESS = 0.4
     }
   SYMBOLS
     {
+    SYMBOLSHAPE
+      {
+      GEOMSHAPE = DEL
+      }
     COLOR = PURPLE
     FILLCOLOR = PURPLE
+    LINETHICKNESS = 0.4
     }
   BARCHARTS
     {
@@ -423,41 +425,154 @@ $!LINEMAP  [12]
     {
     COLOR = PURPLE
     }
+$!LINEMAP  [13]
+  NAME = '&DV&'
+  ASSIGN
+    {
+    ZONE = 1
+    XAXISVAR = 1
+    YAXISVAR = 14
+    }
+  LINES
+    {
+    COLOR = RED
+    LINETHICKNESS = 0.4
+    }
+  SYMBOLS
+    {
+    SYMBOLSHAPE
+      {
+      GEOMSHAPE = DEL
+      }
+    COLOR = RED
+    FILLCOLOR = RED
+    LINETHICKNESS = 0.4
+    }
+  BARCHARTS
+    {
+    COLOR = RED
+    FILLCOLOR = RED
+    }
+  ERRORBARS
+    {
+    COLOR = RED
+    }
+$!LINEMAP  [14]
+  NAME = '&DV&'
+  ASSIGN
+    {
+    ZONE = 1
+    XAXISVAR = 1
+    YAXISVAR = 15
+    }
+  LINES
+    {
+    COLOR = GREEN
+    LINETHICKNESS = 0.4
+    }
+  SYMBOLS
+    {
+    SYMBOLSHAPE
+      {
+      GEOMSHAPE = DEL
+      }
+    COLOR = GREEN
+    FILLCOLOR = GREEN
+    LINETHICKNESS = 0.4
+    }
+  BARCHARTS
+    {
+    COLOR = GREEN
+    FILLCOLOR = GREEN
+    }
+  ERRORBARS
+    {
+    COLOR = GREEN
+    }
+$!LINEMAP  [15]
+  NAME = '&DV&'
+  ASSIGN
+    {
+    ZONE = 1
+    XAXISVAR = 1
+    YAXISVAR = 16
+    }
+  LINES
+    {
+    COLOR = BLUE
+    LINETHICKNESS = 0.4
+    }
+  SYMBOLS
+    {
+    SYMBOLSHAPE
+      {
+      GEOMSHAPE = DEL
+      }
+    COLOR = BLUE
+    FILLCOLOR = BLUE
+    LINETHICKNESS = 0.4
+    }
+  BARCHARTS
+    {
+    COLOR = BLUE
+    FILLCOLOR = BLUE
+    }
+  ERRORBARS
+    {
+    COLOR = BLUE
+    }
+$!LINEMAP  [16]
+  NAME = '&DV&'
+  ASSIGN
+    {
+    ZONE = 1
+    XAXISVAR = 1
+    YAXISVAR = 17
+    }
+  LINES
+    {
+    COLOR = CUSTOM1
+    LINETHICKNESS = 0.4
+    }
+  SYMBOLS
+    {
+    COLOR = CUSTOM1
+    FILLCOLOR = CUSTOM1
+    LINETHICKNESS = 0.4
+    }
+  BARCHARTS
+    {
+    COLOR = CUSTOM1
+    FILLCOLOR = CUSTOM1
+    }
+  ERRORBARS
+    {
+    COLOR = CUSTOM1
+    }
 $!XYLINEAXIS 
   DEPXTOYRATIO = 1
   GRIDAREA
     {
     DRAWBORDER = YES
     }
-  VIEWPORTPOSITION
-    {
-    X1 = 14.452
-    Y1 = 6.8606
-    X2 = 89.452
-    Y2 = 83.861
-    }
-  VIEWPORTTOPSNAPTARGET = 83.8605664488
 $!XYLINEAXIS 
   XDETAIL 1
     {
     COORDSCALE = LOG
     RANGEMIN = 100
-    RANGEMAX = 1600.1499999999998636
-    GRSPACING = 500
+    RANGEMAX = 25602.549999999999272
+    GRSPACING = 5000
     }
 $!XYLINEAXIS 
   YDETAIL 1
     {
     COORDSCALE = LOG
-    RANGEMIN = 0.00059796369730577211832
-    RANGEMAX = 8.6571322410434454753
-    GRSPACING = 2
-    TITLE
-      {
-      TITLEMODE = USETEXT
-      TEXT = 'RMS error'
-      }
+    RANGEMIN = 1.3697799658984877169E-05
+    RANGEMAX = 0.56314728778117328911
+    GRSPACING = 0.1
     }
+$!LINEPLOTLAYERS 
+  SHOWSYMBOLS = YES
 $!FRAMECONTROL ACTIVATEBYNUMBER
   FRAME = 1
 $!SETSTYLEBASE CONFIG

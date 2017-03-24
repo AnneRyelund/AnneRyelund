@@ -27,7 +27,8 @@ public:
    // Number of values per field: u,v,p,omega,d/dx,d/dy, 
    // d^2/dx^2,d^2/dxdy, d^2/dy^2, 
    // d^3/dx^3, d^3/dx^2dy, d^3/dxdy^2,d^3,dy^3
-   Number_of_values_per_field=13; 
+   // du/dx, du/dy, dv/dx, dv/dy
+   Number_of_values_per_field=17; // hierher 13; 
 
    // Pointer to fct that specifies exact vorticity and
    // derivs (for validation).
@@ -40,7 +41,8 @@ public:
                                      double& vort,
                                      Vector<double>& dvort_dx,
                                      Vector<double>& dvort_dxdy,
-                                     Vector<double>& dvort_dxdxdy);
+                                     Vector<double>& dvort_dxdxdy,
+                                     Vector<double>& dveloc_dx);
   
  /// Access function: Pointer to fct that specifies exact vorticity and
  /// derivs (for validation).
@@ -185,17 +187,20 @@ public:
      Vector<double> dvort_dx(2);
      Vector<double> dvort_dxdy(3);
      Vector<double> dvort_dxdxdy(4);
+     Vector<double> dveloc_dx(4);
      Exact_vorticity_fct_pt(x,
                             vort,
                             dvort_dx,
                             dvort_dxdy,
-                            dvort_dxdxdy);
+                            dvort_dxdxdy,
+                            dveloc_dx);
      
      // Smoothed vorticity
      outfile << vort << " ";
 
      // Smoothed vorticity derivatives (d/dx, d/dy, d^2/dx^2, d^2/dxdy, d^2/dy^2
-     // d^3/dx^3, d^3/dx^2dy, d^3/dxdy^2, d^3/dy^3
+     // d^3/dx^3, d^3/dx^2dy, d^3/dxdy^2, d^3/dy^3,
+     // du/dx, du/dy, dv/dx, dv/dy
      outfile << dvort_dx[0] << " "
              << dvort_dx[1] << " "
              << dvort_dxdy[0] << " "
@@ -204,7 +209,11 @@ public:
              << dvort_dxdxdy[0] << " "
              << dvort_dxdxdy[1] << " "
              << dvort_dxdxdy[2] << " "
-             << dvort_dxdxdy[3] << " ";
+             << dvort_dxdxdy[3] << " "
+             << dveloc_dx[0] << " "
+             << dveloc_dx[1] << " "
+             << dveloc_dx[2] << " "
+             << dveloc_dx[3] << " ";
      
      outfile << std::endl;   
     }
@@ -242,14 +251,15 @@ public:
      Vector<double> veloc(2);
      Vector<double> dvort_dx(2);
      Vector<double> dvort_dxdy(3);
-     Vector<double> dvort_dxdxdy(4);
-     unsigned i_field=0;
+     Vector<double> dvort_dxdxdy(4); 
+     Vector<double> dveloc_dx(4);
      vorticity_and_its_derivs(s, 
                               veloc,
                               vort,
                               dvort_dx,
                               dvort_dxdy,
-                              dvort_dxdxdy);
+                              dvort_dxdxdy,
+                              dveloc_dx);
      // Coordinates
      Vector<double> x(2);
      for(unsigned i=0;i<2;i++) 
@@ -264,9 +274,10 @@ public:
      
      // Smoothed vorticity
      outfile << vort << " ";
-     
+
      // Smoothed vorticity derivatives (d/dx, d/dy, d^2/dx^2, d^2/dxdy, d^2/dy^2
      // d^3/dx^3, d^3/dx^2dy, d^3/dxdy^2, d^3/dy^3
+     // du/dx, du/dy, dv/dx, dv/dy
      outfile << dvort_dx[0] << " "
              << dvort_dx[1] << " "
              << dvort_dxdy[0] << " "
@@ -275,7 +286,11 @@ public:
              << dvort_dxdxdy[0] << " "
              << dvort_dxdxdy[1] << " "
              << dvort_dxdxdy[2] << " "
-             << dvort_dxdxdy[3] << " ";
+             << dvort_dxdxdy[3] << " "
+             << dveloc_dx[0] << " "
+             << dveloc_dx[1] << " "
+             << dveloc_dx[2] << " "
+             << dveloc_dx[3] << " ";
 
      outfile << std::endl;   
     }
@@ -340,8 +355,9 @@ public:
      outfile << smoothed_vort << " ";
 
      // Smoothed vorticity derivatives (d/dx, d/dy, d^2/dx^2, d^2/dxdy, d^2/dy^2
-     // d^3/dx^3, d^3/dx^2dy, d^3/dxdy^2, d^3/dy^3
-     for (unsigned i=1;i<10;i++)
+     // d^3/dx^3, d^3/dx^2dy, d^3/dxdy^2, d^3/dy^3,
+     // du/dx, du/dy, dv/dx, dv/dy
+     for (unsigned i=1;i<14;i++) // hierher was 10
       {
        double smoothed_vort_deriv=0.0;
        for(unsigned l=0;l<n_node;l++)
@@ -360,6 +376,37 @@ public:
   }
 
 
+ /// Get raw derivative of velocity
+ void get_raw_velocity_deriv(const Vector<double>& s,
+                             Vector<double>& dveloc_dx) const
+ {
+  //Find out how many nodes there are
+  unsigned n_node = this->nnode();
+  
+  //Set up memory for the shape functions
+  Shape psif(n_node);
+  DShape dpsifdx(n_node,2);
+  
+  //Call the derivatives of the shape and test functions
+  this->dshape_eulerian(s,psif,dpsifdx);
+  
+  //Initialise to zero
+  for(unsigned j=0;j<4;j++)
+   {
+    dveloc_dx[j] = 0.0;
+   }
+  
+  // Loop over nodes
+  for(unsigned l=0;l<n_node;l++) 
+   {
+    //Loop over derivative directions
+    for(unsigned j=0;j<2;j++)
+     {                               
+      dveloc_dx[j]   += this->nodal_value(l,0)*dpsifdx(l,j);            
+      dveloc_dx[j+2] += this->nodal_value(l,1)*dpsifdx(l,j);
+      }
+    }
+  }
 
  /// Get raw derivative of smoothed vorticity
  void get_raw_vorticity_deriv(const Vector<double>& s,
@@ -530,11 +577,14 @@ public:
      double synth_vort=0.0;
      Vector<double> synth_dvort_dx(2,0.0);
      Vector<double> synth_dvort_dxdy(3,0.0);
-     Vector<double> synth_dvort_dxdxdy(4,0.0);
+     Vector<double> synth_dvort_dxdxdy(4,0.0); 
+     Vector<double> synth_dveloc_dx(4,0.0);
+
      if (Exact_vorticity_fct_pt!=0) 
       {
        Exact_vorticity_fct_pt(x,synth_vort,synth_dvort_dx,
-                              synth_dvort_dxdy,synth_dvort_dxdxdy);
+                              synth_dvort_dxdy,synth_dvort_dxdxdy,
+                              synth_dveloc_dx);
       }
     double synth_quantity=synth_vort;
     if ((i==1)||(i==2))
@@ -548,6 +598,10 @@ public:
     if ((i==6)||(i==7)||(i==8)||(i==9))
      {
       synth_quantity=synth_dvort_dxdxdy[i-6];
+     }
+    if ((i==10)||(i==11)||(i==12)||(i==13))
+     {
+      synth_quantity=synth_dveloc_dx[i-10];
      }
     // Add squared difference
     norm_squared+=pow(smoothed_vort-synth_quantity,2)*W;
@@ -563,7 +617,8 @@ public:
                                double& vort,
                                Vector<double>& dvort_dx,
                                Vector<double>& dvort_dxdy,
-                               Vector<double>& dvort_dxdxdy) 
+                               Vector<double>& dvort_dxdxdy,
+                               Vector<double>& dveloc_dx) 
  {
   // Shape functions
   unsigned n_node = this->nnode();   
@@ -583,7 +638,8 @@ public:
   
   // Smoothed vorticity derivatives (d/dx, d/dy, d^2/dx^2, d^2/dxdy, d^2/dy^2, 
   // d^3/dx^3, d^3/dx^2dy, d^3/dxdy^2,d^3,dy^3
-  for (unsigned i=1;i<10;i++)
+  // du/dx, du/dy, dv/dx, dv/dy
+  for (unsigned i=1;i<14;i++) // hierher used to be 10
    {
     double smoothed_vort_deriv=0.0;
     for(unsigned l=0;l<n_node;l++) 
@@ -620,6 +676,18 @@ public:
      case 9:
       dvort_dxdxdy[3]=smoothed_vort_deriv;
       break;
+     case 10:
+      dveloc_dx[0]=smoothed_vort_deriv;
+      break;
+     case 11:
+      dveloc_dx[1]=smoothed_vort_deriv;
+      break;
+     case 12:
+      dveloc_dx[2]=smoothed_vort_deriv;
+      break;
+     case 13:
+      dveloc_dx[3]=smoothed_vort_deriv;
+      break;
      default:
       oomph_info << "never get here\n";
       abort();
@@ -635,6 +703,7 @@ public:
 
  /// \short Number of values per field: u,v,p,omega,d/dx,d/dy, 
  /// d^2/dx^2,d^2/dxdy, d^2/dy^2,
+ // du/dx, du/dy, dv/dx, dv/dy
  unsigned Number_of_values_per_field;
 
  /// Pointer to fct that specifies exact vorticity and
@@ -643,26 +712,6 @@ public:
 
 
 };
-
-
-
-
-/////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////
-
-// hierher kill?
-/* //======================================================================= */
-/* /// Face geometry for element is the same as that for the underlying */
-/* /// wrapped element */
-/* //======================================================================= */
-/*  template<> */
-/*  class FaceGeometry<VorticitySmootherElement> */
-/*   : public virtual QElement<1,3>  */
-/*  { */
-/*  public: */
-/*   FaceGeometry() : QElement<1,3>() {} */
-/*  }; */
 
 
 } // end namespace extension
@@ -937,7 +986,6 @@ class VorticitySmoother
    } // end of loop over elements
    
 
-  //hierher 
    // Cleanup
    for (typename std::map<Node*,Vector<ELEMENT*>*>::iterator it=
          aux_adjacent_elements_pt.begin();
@@ -955,7 +1003,8 @@ class VorticitySmoother
  /// a pointer to it. n_deriv indicates which derivative of the
  /// vorticity is supposed to be smoothed: 0: zeroth (i.e. vorticity
  /// itself; 1: d/dx; 2: d/dy; 3: d^2/dx^2; 4: d^2/dxdy 5: d^2/dy^2 
- /// 6: d^3/dx^3, 7: d^3/dx^2dy, 8: d^3/dxdy^2, 9: d^3/dy^3, 
+ /// 6: d^3/dx^3, 7: d^3/dx^2dy, 8: d^3/dxdy^2, 9: d^3/dy^3,
+ /// 10: du/dx, 11: du/dy, 12: dv/dx, 13: dv/dy
  void get_recovered_vorticity_in_patch(
   const Vector<ELEMENT*>& patch_el_pt,
   const unsigned& num_recovery_terms, 
@@ -1034,6 +1083,7 @@ class VorticitySmoother
      Vector<double> deriv_vorticity(2); 
      Vector<double> second_deriv_vorticity(3); 
      Vector<double> third_deriv_vorticity(4); 
+     Vector<double> deriv_velocity(4); 
      if((n_deriv==1)||(n_deriv==2))
       {
        el_pt->get_raw_vorticity_deriv(s,deriv_vorticity);
@@ -1044,12 +1094,15 @@ class VorticitySmoother
        el_pt->get_raw_vorticity_second_deriv(s,second_deriv_vorticity);
       }
      // Get FE estimates for third deriv of vorticity: 
-
      else if((n_deriv==6)||(n_deriv==7)||(n_deriv==8)||(n_deriv==9))
       {
        el_pt->get_raw_vorticity_third_deriv(s,third_deriv_vorticity);
       }
-
+     // Get FE estimates for derivs of velocity
+     else if((n_deriv==10)||(n_deriv==11)||(n_deriv==12)||(n_deriv==13))
+      {
+       el_pt->get_raw_velocity_deriv(s,deriv_velocity);
+      }
 
      // Add elemental RHSs and recovery matrix to global versions
      //----------------------------------------------------------
@@ -1142,7 +1195,6 @@ class VorticitySmoother
          rhs[l] += third_deriv_vorticity[2]*psi_r[l]*W;
         }
       }
-     
      // Get xxy-derivative of vorticity
      else if(n_deriv==9)
       {
@@ -1151,6 +1203,46 @@ class VorticitySmoother
        for(unsigned l=0;l<num_recovery_terms;l++)
         {
          rhs[l] += third_deriv_vorticity[3]*psi_r[l]*W;
+        }
+      }
+     // Get x-derivative of u-velocity
+     else if(n_deriv==10)
+      {
+       // RHS 
+       // Loop over the nodes for the test functions 
+       for(unsigned l=0;l<num_recovery_terms;l++)
+        {
+         rhs[l] += deriv_velocity[0]*psi_r[l]*W;
+        }
+      }
+     // Get y-derivative of u-velocity
+     else if(n_deriv==11)
+      {
+       // RHS 
+       // Loop over the nodes for the test functions 
+       for(unsigned l=0;l<num_recovery_terms;l++)
+        {
+         rhs[l] += deriv_velocity[1]*psi_r[l]*W;
+        }
+      }
+     // Get x-derivative of v-velocity
+     else if(n_deriv==12)
+      {
+       // RHS 
+       // Loop over the nodes for the test functions 
+       for(unsigned l=0;l<num_recovery_terms;l++)
+        {
+         rhs[l] += deriv_velocity[2]*psi_r[l]*W;
+        }
+      }
+     // Get y-derivative of v-velocity
+     else if(n_deriv==13)
+      {
+       // RHS 
+       // Loop over the nodes for the test functions 
+       for(unsigned l=0;l<num_recovery_terms;l++)
+        {
+         rhs[l] += deriv_velocity[3]*psi_r[l]*W;
         }
       }
      else
@@ -1238,20 +1330,6 @@ class VorticitySmoother
     }
   }
  
-
-
-
-
-
- 
- /* /// Recover vorticity from patches */
- /* void old_recover_vorticity(Mesh* mesh_pt, unsigned& n_deriv) */
- /*  { */
- /*   DocInfo doc_info; */
- /*   doc_info.disable_doc(); */
- /*   old_recover_vorticity(mesh_pt,n_deriv,doc_info); */
- /*  } */
-
  
  /// Recover vorticity from patches
  void recover_vorticity(Mesh* mesh_pt)
@@ -1262,12 +1340,14 @@ class VorticitySmoother
   }
 
 
- 
 
  /// Recover vorticity from patches -- output intermediate steps
  /// to directory specified by DocInfo object
  void recover_vorticity(Mesh* mesh_pt, DocInfo& doc_info)
   {
+   
+   double t_start=TimingHelpers::timer();
+
    // Make patches
    //-------------
    std::map<Node*,Vector<ELEMENT*>*> adjacent_elements_pt;
@@ -1287,7 +1367,7 @@ class VorticitySmoother
    map<Node* , unsigned> count;
 
    // Loop over derivatives
-   for (unsigned deriv=0;deriv<10;deriv++) // hierher used to be 6
+   for (unsigned deriv=0;deriv<14;deriv++) // hierher used to be 10
     {
 
      // Storage for accumulated nodal vorticity (used to compute
@@ -1310,44 +1390,6 @@ class VorticitySmoother
                                         num_recovery_terms, 
                                         recovered_vorticity_coefficient_pt,
                                         deriv);
-       
-       // hierher kill recovered_vorticity_coefficient_pt!
-
-       
-       /* // Output? */
-       /* if (doc_info.is_doc_enabled()) */
-       /*  { */
-       /*   // Output */
-       /*   std::ofstream some_file; */
-       /*   char filename[100]; */
-       /*   unsigned nplot=5; */
-         
-       /*   // hierher use doc info thing */
-       /*   sprintf(filename,"%s/patch_recovered_vort%i.dat", */
-       /*           doc_info.directory().c_str(), */
-       /*           counter); */
-       /*   counter++; */
-       /*   some_file.open(filename); */
-         
-       /*   //Loop over all elements to output recovered vorticity */
-       /*   unsigned nelem=(*(it->second)).size(); */
-       /*   for (unsigned e=0;e<nelem;e++) */
-       /*    { */
-       /*     // Get pointer to element */
-       /*     ELEMENT* el_pt=(*(it->second))[e]; */
-           
-       /*     // Loop over plot points */
-       /*     output_recover_vorticity_in_patch(el_pt, */
-       /*                                       recovered_vorticity_coefficient_pt, */
-       /*                                       some_file, */
-       /*                                       nplot); */
-       /*    } */
-         
-       /*   // hierher can we close the file here? */
-       /*   some_file.close(); */
-         
-       /*  } // end output */
-       
        
        // Now get the nodal average of the recovered vorticity
        // (nodes are generally part of multiple patches)
@@ -1422,654 +1464,12 @@ class VorticitySmoother
     {
      delete it->second;
     }
-   
-  
-   /* //Calculation of first deriv of the vorticity */
-   /* //-------------------------------------- */
-   /* if(n_deriv==1||n_deriv==2) */
-   /*  { */
-   /*   // Storage for accumulated nodal derivatives of vorticity (used to comupute */
-   /*   // nodal averages) */
-   /*   map<Node*, double> averaged_deriv_recovered_vort; */
 
-   /*   // Do patch recovery */
-   /*   unsigned counter=0; */
-   /*   for (std::map<Node*,Vector<ELEMENT*>*>::iterator it= */
-   /*         adjacent_elements_pt.begin(); */
-   /*        it!=adjacent_elements_pt.end();it++) */
-   /*    { */
-       
-   /*     // Setup smoothed vorticity field for patches */
-   /*     Vector<double>* recovered_vorticity_coefficient_pt; */
-   /*     get_recovered_vorticity_in_patch(*(it->second), */
-   /*                                      num_recovery_terms,  */
-   /*                                      recovered_vorticity_coefficient_pt, */
-   /*                                      n_deriv); */
-       
-   /*     if (doc_info.is_doc_enabled()) */
-   /*      { */
-   /*       // Output */
-   /*       ofstream some_file; */
-   /*       char filename[100]; */
-   /*       unsigned nplot=5; */
-         
-   /*       sprintf(filename,"%s/patch_recovered_vort_deriv%i.dat", */
-   /*               doc_info.directory().c_str(), */
-   /*               counter); */
-   /*       counter++; */
-   /*       some_file.open(filename); */
-         
-   /*       //Loop over all elements to output recovered vorticity */
-   /*       unsigned nelem=(*(it->second)).size(); */
-   /*       for (unsigned e=0;e<nelem;e++) */
-   /*        { */
-   /*         // Get pointer to element */
-   /*         ELEMENT* const el_pt=(*(it->second))[e]; */
-           
-   /*         //Output recovered vorticity in patch */
-   /*         output_recover_vorticity_in_patch(el_pt, */
-   /*                                           recovered_vorticity_coefficient_pt, */
-   /*                                           some_file, */
-   /*                                           nplot); */
-   /*        } */
-         
-   /*       some_file.close(); */
-         
-   /*      }//end of output */
-       
-   /*     // Now get the nodal average of the recovered vorticity */
-   /*     // (nodes are generally part of multiple patches) */
-
-   /*     //Loop over all elements to get recovered deriv vorticity */
-   /*     unsigned nelem=(*(it->second)).size(); */
-   /*     for (unsigned e=0;e<nelem;e++) */
-   /*      { */
-   /*       // Get pointer to element */
-   /*       ELEMENT* const el_pt=(*(it->second))[e]; */
-         
-   /*       // Get the number of nodes by element */
-   /*       unsigned nnode_el=el_pt->nnode(); */
-   /*       for(unsigned j=0;j<nnode_el;j++) */
-   /*        { */
-   /*         //Get local coordinates */
-   /*         Vector<double> s(2); */
-   /*         Node* nod_pt=el_pt->node_pt(j); */
-   /*         el_pt->local_coordinate_of_node(j,s); */
-           
-   /*         // Interpolate the global (Eulerian) coordinate */
-   /*         Vector<double> x(2); */
-   /*         el_pt->interpolated_x(s,x); */
-           
-   /*         // Recovery shape functions at global (Eulerian) coordinate */
-   /*         Vector<double> psi_r(num_recovery_terms); */
-   /*         shape_rec(x,psi_r); */
-           
-   /*         // Assemble recovered vorticity */
-   /*         double recovered_vort_deriv=0.0; */
-   /*         for (unsigned i=0;i<num_recovery_terms;i++) */
-   /*          { */
-   /*           recovered_vort_deriv+= */
-   /*            (*recovered_vorticity_coefficient_pt)[i]*psi_r[i]; */
-   /*          } */
-           
-   /*         // Keep adding */
-   /*         averaged_deriv_recovered_vort[nod_pt]+=recovered_vort_deriv; */
-   /*         count[nod_pt]++; */
-   /*        } */
-   /*      } */
-   /*    } */
-     
-   /*   //Loop over all nodes to actually work out the average */
-   /*   unsigned nnod=mesh_pt->nnode(); */
-   /*   for(unsigned j=0;j<nnod;j++) */
-   /*    { */
-   /*     Node* nod_pt=mesh_pt->node_pt(j); */
-   /*     //Calculate the values of the smoothed vorticity  */
-   /*     averaged_deriv_recovered_vort[nod_pt]/=count[nod_pt]; */
-       
-   /*     //Assign smoothed vorticity to dofs */
-   /*     nod_pt->set_value(Smoothed_vorticity_index+n_deriv, */
-   /*                       averaged_deriv_recovered_vort[nod_pt]); */
-   /*    } */
-   /*  } */
-
-   /* // Start again */
-   /* count.clear(); */
-   
-
-   /* //Calculation of second deriv of the vorticity */
-   /* //-------------------------------------- */
-   /* if((n_deriv==3)||(n_deriv==4)||(n_deriv==5)) */
-   /*  { */
-   /*   // Storage for accumulated nodal derivatives of vorticity  */
-   /*   // (used to comupute nodal averages) */
-   /*   map<Node*, double> averaged_second_deriv_recovered_vort; */
-   /*   // Do patch recovery */
-   /*   unsigned counter=0; */
-   /*   for (std::map<Node*,Vector<ELEMENT*>*>::iterator it= */
-   /*         adjacent_elements_pt.begin(); */
-   /*        it!=adjacent_elements_pt.end();it++) */
-   /*    { */
-       
-   /*     // Setup smoothed vorticity field for patches */
-   /*     Vector<double>* recovered_vorticity_coefficient_pt; */
-   /*     get_recovered_vorticity_in_patch(*(it->second), */
-   /*                                      num_recovery_terms,  */
-   /*                                      recovered_vorticity_coefficient_pt, */
-   /*                                      n_deriv); */
-       
-   /*     if (doc_info.is_doc_enabled()) */
-   /*      { */
-   /*       // Output */
-   /*       ofstream some_file; */
-   /*       char filename[100]; */
-   /*       unsigned nplot=5; */
-         
-   /*       sprintf(filename,"%s/patch_recovered_vort_second_deriv%i.dat", */
-   /*               doc_info.directory().c_str(), */
-   /*               counter); */
-   /*       counter++; */
-   /*       some_file.open(filename); */
-         
-   /*       //Loop over all elements to output recovered vorticity */
-   /*       unsigned nelem=(*(it->second)).size(); */
-   /*       for (unsigned e=0;e<nelem;e++) */
-   /*        { */
-   /*         // Get pointer to element */
-   /*         ELEMENT* const el_pt=(*(it->second))[e]; */
-           
-   /*         //Output recovered vorticity in patch */
-   /*         output_recover_vorticity_in_patch(el_pt, */
-   /*                                           recovered_vorticity_coefficient_pt, */
-   /*                                           some_file, */
-   /*                                           nplot); */
-   /*        } */
-         
-   /*       some_file.close(); */
-         
-   /*      }//end of output */
-       
-   /*     // Now get the nodal average of the recovered vorticity */
-   /*     // (nodes are generally part of multiple patches) */
-
-   /*     //Loop over all elements to get recovered deriv vorticity */
-   /*     unsigned nelem=(*(it->second)).size(); */
-   /*     for (unsigned e=0;e<nelem;e++) */
-   /*      { */
-   /*       // Get pointer to element */
-   /*       ELEMENT* const el_pt=(*(it->second))[e]; */
-         
-   /*       // Get the number of nodes by element */
-   /*       unsigned nnode_el=el_pt->nnode(); */
-   /*       for(unsigned j=0;j<nnode_el;j++) */
-   /*        { */
-   /*         //Get local coordinates */
-   /*         Vector<double> s(2); */
-   /*         Node* nod_pt=el_pt->node_pt(j); */
-   /*         el_pt->local_coordinate_of_node(j,s); */
-           
-   /*         // Interpolate the global (Eulerian) coordinate */
-   /*         Vector<double> x(2); */
-   /*         el_pt->interpolated_x(s,x); */
-           
-   /*         // Recovery shape functions at global (Eulerian) coordinate */
-   /*         Vector<double> psi_r(num_recovery_terms); */
-   /*         shape_rec(x,psi_r); */
-           
-   /*         // Assemble recovered vorticity */
-   /*         double recovered_vort_second_deriv=0.0; */
-   /*         for (unsigned i=0;i<num_recovery_terms;i++) */
-   /*          { */
-   /*           recovered_vort_second_deriv+= */
-   /*            (*recovered_vorticity_coefficient_pt)[i]*psi_r[i]; */
-   /*          } */
-           
-   /*         // Keep adding */
-   /*         averaged_second_deriv_recovered_vort[nod_pt]+= */
-   /*          recovered_vort_second_deriv; */
-   /*         count[nod_pt]++; */
-   /*        } */
-   /*      } */
-   /*    } */
-     
-   /*   //Loop over all nodes to actually work out the average */
-   /*   unsigned nnod=mesh_pt->nnode(); */
-   /*   for(unsigned j=0;j<nnod;j++) */
-   /*    { */
-   /*     Node* nod_pt=mesh_pt->node_pt(j); */
-   /*     //Calculate the values of the smoothed vorticity  */
-   /*     averaged_second_deriv_recovered_vort[nod_pt]/=count[nod_pt]; */
-       
-   /*     //Assign smoothed vorticity to dofs */
-   /*     nod_pt->set_value(Smoothed_vorticity_index+n_deriv, */
-   /*                       averaged_second_deriv_recovered_vort[nod_pt]); */
-   /*    } */
-   /*  } */
-
+   oomph_info << "Time for vorticity recovery: " 
+              << TimingHelpers::timer()-t_start 
+              << " sec " << std::endl;
   }
 
-
-
-
-/* //=================== */
-
-
-/*  /// Recover vorticity from patches -- output intermediate steps */
-/*  /// to directory specified by DocInfo object */
-/*  void old_recover_vorticity(Mesh* mesh_pt, unsigned& n_deriv, DocInfo& doc_info) */
-/*   { */
-   
-/*    // Make patches */
-/*    //------------- */
-/*    std::map<Node*,Vector<ELEMENT*>*> adjacent_elements_pt; */
-/*    Vector<Node*> vertex_node_pt; */
-/*    setup_patches(mesh_pt, */
-/*                  adjacent_elements_pt, */
-/*                  vertex_node_pt); */
-   
-/*    // Determine number of coefficients for expansion of recovered vorticity */
-/*    // Use complete polynomial of given order for recovery */
-/*    unsigned num_recovery_terms=nrecovery_order(); */
- 
-/*    // hierher get from element */
-/*    unsigned Smoothed_vorticity_index=3;   */
-   
-/*    // Counter for averaging of recovered vorticity and its derivatives */
-/*    map<Node* , unsigned> count; */
-   
-/*    if(n_deriv==0) */
-/*     { */
-/*      // Storage for accumulated nodal vorticity (used to compute */
-/*      // nodal averages) */
-/*      map<Node*, double> averaged_recovered_vort; */
-     
-/*      //Calculation of vorticity */
-/*      //------------------------ */
-     
-/*      // Do patch recovery */
-/*      unsigned  counter=0; */
-/*      for (std::map<Node*,Vector<ELEMENT*>*>::iterator it= */
-  /*          adjacent_elements_pt.begin(); */
-  /*         it!=adjacent_elements_pt.end();it++) */
-  /*     { */
-       
-  /*      // Setup smoothed vorticity field for patches */
-  /*      Vector<double>* recovered_vorticity_coefficient_pt; */
-  /*      get_recovered_vorticity_in_patch(*(it->second), */
-  /*                                       num_recovery_terms,  */
-  /*                                       recovered_vorticity_coefficient_pt, */
-  /*                                       n_deriv); */
-       
-        
-  /*      if (doc_info.is_doc_enabled()) */
-  /*       { */
-  /*        // Output */
-  /*        std::ofstream some_file; */
-  /*        char filename[100]; */
-  /*        unsigned nplot=5; */
-         
-  /*        // hierher use doc info thing */
-  /*        sprintf(filename,"%s/patch_recovered_vort%i.dat", */
-  /*                doc_info.directory().c_str(), */
-  /*                counter); */
-  /*        counter++; */
-  /*        some_file.open(filename); */
-         
-  /*        //Loop over all elements to output recovered vorticity */
-  /*        unsigned nelem=(*(it->second)).size(); */
-  /*        for (unsigned e=0;e<nelem;e++) */
-  /*         { */
-  /*          // Get pointer to element */
-  /*          ELEMENT* el_pt=(*(it->second))[e]; */
-           
-  /*          // Loop over plot points */
-  /*          output_recover_vorticity_in_patch(el_pt, */
-  /*                                            recovered_vorticity_coefficient_pt, */
-  /*                                            some_file, */
-  /*                                            nplot); */
-  /*         } */
-         
-  /*        // hierher can we close the file here? */
-  /*        some_file.close(); */
-         
-  /*       } // end output */
-       
-       
-  /*      // Now get the nodal average of the recovered vorticity */
-  /*      // (nodes are generally part of multiple patches) */
-       
-  /*      //Loop over all elements to get recovered vorticity */
-  /*      unsigned nelem=(*(it->second)).size(); */
-  /*      for (unsigned e=0;e<nelem;e++) */
-  /*       { */
-  /*        // Get pointer to element */
-  /*        ELEMENT* const el_pt=(*(it->second))[e]; */
-         
-  /*        // Get the number of nodes by element */
-  /*        unsigned nnode_el=el_pt->nnode(); */
-  /*        for(unsigned j=0;j<nnode_el;j++) */
-  /*         { */
-  /*          //Get local coordinates */
-  /*          Vector<double> s(2); */
-  /*          Node* nod_pt=el_pt->node_pt(j); */
-  /*          el_pt->local_coordinate_of_node(j,s); */
-           
-           
-  /*          // Interpolate the global (Eulerian) coordinate */
-  /*          Vector<double> x(2); */
-  /*          el_pt->interpolated_x(s,x); */
-           
-  /*          // Recovery shape functions at global (Eulerian) coordinate */
-  /*          Vector<double> psi_r(num_recovery_terms); */
-  /*          shape_rec(x,psi_r); */
-           
-  /*          // Assemble recovered vorticity */
-  /*          double recovered_vort=0.0; */
-  /*          for (unsigned i=0;i<num_recovery_terms;i++) */
-  /*           { */
-  /*            recovered_vort+=(*recovered_vorticity_coefficient_pt)[i]*psi_r[i]; */
-  /*           } */
-           
-  /*          // Keep adding */
-  /*          averaged_recovered_vort[nod_pt]+=recovered_vort; */
-  /*          count[nod_pt]++; */
-  /*         } */
-  /*       } */
-  /*     } */
-     
-  /*    //Loop over all nodes to actually work out the average */
-  /*    unsigned nnod=mesh_pt->nnode(); */
-  /*    for(unsigned j=0;j<nnod;j++) */
-  /*     { */
-  /*      Node* nod_pt=mesh_pt->node_pt(j); */
-  /*      //Calculate the values of the smoothed vorticity  */
-  /*      averaged_recovered_vort[nod_pt]/=count[nod_pt]; */
-       
-  /*      //Assign smoothed vorticity to dofs */
-  /*      nod_pt->set_value(Smoothed_vorticity_index+n_deriv, */
-  /*                        averaged_recovered_vort[nod_pt]); */
-  /*     } */
-  /*   } */
-   
-
-  /*  //---  */
-
-  /*  // Start again */
-  /*  count.clear(); */
-
-  /*  //Calculation of first deriv of the vorticity */
-  /*  //-------------------------------------- */
-  /*  if(n_deriv==1||n_deriv==2) */
-  /*   { */
-  /*    // Storage for accumulated nodal derivatives of vorticity (used to comupute */
-  /*    // nodal averages) */
-  /*    map<Node*, double> averaged_deriv_recovered_vort; */
-
-  /*    // Do patch recovery */
-  /*    unsigned counter=0; */
-  /*    for (std::map<Node*,Vector<ELEMENT*>*>::iterator it= */
-  /*          adjacent_elements_pt.begin(); */
-  /*         it!=adjacent_elements_pt.end();it++) */
-  /*     { */
-       
-  /*      // Setup smoothed vorticity field for patches */
-  /*      Vector<double>* recovered_vorticity_coefficient_pt; */
-  /*      get_recovered_vorticity_in_patch(*(it->second), */
-  /*                                       num_recovery_terms,  */
-  /*                                       recovered_vorticity_coefficient_pt, */
-  /*                                       n_deriv); */
-       
-  /*      if (doc_info.is_doc_enabled()) */
-  /*       { */
-  /*        // Output */
-  /*        ofstream some_file; */
-  /*        char filename[100]; */
-  /*        unsigned nplot=5; */
-         
-  /*        sprintf(filename,"%s/patch_recovered_vort_deriv%i.dat", */
-  /*                doc_info.directory().c_str(), */
-  /*                counter); */
-  /*        counter++; */
-  /*        some_file.open(filename); */
-         
-  /*        //Loop over all elements to output recovered vorticity */
-  /*        unsigned nelem=(*(it->second)).size(); */
-  /*        for (unsigned e=0;e<nelem;e++) */
-  /*         { */
-  /*          // Get pointer to element */
-  /*          ELEMENT* const el_pt=(*(it->second))[e]; */
-           
-  /*          //Output recovered vorticity in patch */
-  /*          output_recover_vorticity_in_patch(el_pt, */
-  /*                                            recovered_vorticity_coefficient_pt, */
-  /*                                            some_file, */
-  /*                                            nplot); */
-  /*         } */
-         
-  /*        some_file.close(); */
-         
-  /*       }//end of output */
-       
-  /*      // Now get the nodal average of the recovered vorticity */
-  /*      // (nodes are generally part of multiple patches) */
-
-  /*      //Loop over all elements to get recovered deriv vorticity */
-  /*      unsigned nelem=(*(it->second)).size(); */
-  /*      for (unsigned e=0;e<nelem;e++) */
-  /*       { */
-  /*        // Get pointer to element */
-  /*        ELEMENT* const el_pt=(*(it->second))[e]; */
-         
-  /*        // Get the number of nodes by element */
-  /*        unsigned nnode_el=el_pt->nnode(); */
-  /*        for(unsigned j=0;j<nnode_el;j++) */
-  /*         { */
-  /*          //Get local coordinates */
-  /*          Vector<double> s(2); */
-  /*          Node* nod_pt=el_pt->node_pt(j); */
-  /*          el_pt->local_coordinate_of_node(j,s); */
-           
-  /*          // Interpolate the global (Eulerian) coordinate */
-  /*          Vector<double> x(2); */
-  /*          el_pt->interpolated_x(s,x); */
-           
-  /*          // Recovery shape functions at global (Eulerian) coordinate */
-  /*          Vector<double> psi_r(num_recovery_terms); */
-  /*          shape_rec(x,psi_r); */
-           
-  /*          // Assemble recovered vorticity */
-  /*          double recovered_vort_deriv=0.0; */
-  /*          for (unsigned i=0;i<num_recovery_terms;i++) */
-  /*           { */
-  /*            recovered_vort_deriv+= */
-  /*             (*recovered_vorticity_coefficient_pt)[i]*psi_r[i]; */
-  /*           } */
-           
-  /*          // Keep adding */
-  /*          averaged_deriv_recovered_vort[nod_pt]+=recovered_vort_deriv; */
-  /*          count[nod_pt]++; */
-  /*         } */
-  /*       } */
-  /*     } */
-     
-  /*    //Loop over all nodes to actually work out the average */
-  /*    unsigned nnod=mesh_pt->nnode(); */
-  /*    for(unsigned j=0;j<nnod;j++) */
-  /*     { */
-  /*      Node* nod_pt=mesh_pt->node_pt(j); */
-  /*      //Calculate the values of the smoothed vorticity  */
-  /*      averaged_deriv_recovered_vort[nod_pt]/=count[nod_pt]; */
-       
-  /*      //Assign smoothed vorticity to dofs */
-  /*      nod_pt->set_value(Smoothed_vorticity_index+n_deriv, */
-  /*                        averaged_deriv_recovered_vort[nod_pt]); */
-  /*     } */
-  /*   } */
-
-  /*  // Start again */
-  /*  count.clear(); */
-   
-
-  /*  //Calculation of second deriv of the vorticity */
-  /*  //-------------------------------------- */
-  /*  if((n_deriv==3)||(n_deriv==4)||(n_deriv==5)) */
-  /*   { */
-  /*    // Storage for accumulated nodal derivatives of vorticity  */
-  /*    // (used to comupute nodal averages) */
-  /*    map<Node*, double> averaged_second_deriv_recovered_vort; */
-  /*    // Do patch recovery */
-  /*    unsigned counter=0; */
-  /*    for (std::map<Node*,Vector<ELEMENT*>*>::iterator it= */
-  /*          adjacent_elements_pt.begin(); */
-  /*         it!=adjacent_elements_pt.end();it++) */
-  /*     { */
-       
-  /*      // Setup smoothed vorticity field for patches */
-  /*      Vector<double>* recovered_vorticity_coefficient_pt; */
-  /*      get_recovered_vorticity_in_patch(*(it->second), */
-  /*                                       num_recovery_terms,  */
-  /*                                       recovered_vorticity_coefficient_pt, */
-  /*                                       n_deriv); */
-       
-  /*      if (doc_info.is_doc_enabled()) */
-  /*       { */
-  /*        // Output */
-  /*        ofstream some_file; */
-  /*        char filename[100]; */
-  /*        unsigned nplot=5; */
-         
-  /*        sprintf(filename,"%s/patch_recovered_vort_second_deriv%i.dat", */
-  /*                doc_info.directory().c_str(), */
-  /*                counter); */
-  /*        counter++; */
-  /*        some_file.open(filename); */
-         
-  /*        //Loop over all elements to output recovered vorticity */
-  /*        unsigned nelem=(*(it->second)).size(); */
-  /*        for (unsigned e=0;e<nelem;e++) */
-  /*         { */
-  /*          // Get pointer to element */
-  /*          ELEMENT* const el_pt=(*(it->second))[e]; */
-           
-  /*          //Output recovered vorticity in patch */
-  /*          output_recover_vorticity_in_patch(el_pt, */
-  /*                                            recovered_vorticity_coefficient_pt, */
-  /*                                            some_file, */
-  /*                                            nplot); */
-  /*         } */
-         
-  /*        some_file.close(); */
-         
-  /*       }//end of output */
-       
-  /*      // Now get the nodal average of the recovered vorticity */
-  /*      // (nodes are generally part of multiple patches) */
-
-  /*      //Loop over all elements to get recovered deriv vorticity */
-  /*      unsigned nelem=(*(it->second)).size(); */
-  /*      for (unsigned e=0;e<nelem;e++) */
-  /*       { */
-  /*        // Get pointer to element */
-  /*        ELEMENT* const el_pt=(*(it->second))[e]; */
-         
-  /*        // Get the number of nodes by element */
-  /*        unsigned nnode_el=el_pt->nnode(); */
-  /*        for(unsigned j=0;j<nnode_el;j++) */
-  /*         { */
-  /*          //Get local coordinates */
-  /*          Vector<double> s(2); */
-  /*          Node* nod_pt=el_pt->node_pt(j); */
-  /*          el_pt->local_coordinate_of_node(j,s); */
-           
-  /*          // Interpolate the global (Eulerian) coordinate */
-  /*          Vector<double> x(2); */
-  /*          el_pt->interpolated_x(s,x); */
-           
-  /*          // Recovery shape functions at global (Eulerian) coordinate */
-  /*          Vector<double> psi_r(num_recovery_terms); */
-  /*          shape_rec(x,psi_r); */
-           
-  /*          // Assemble recovered vorticity */
-  /*          double recovered_vort_second_deriv=0.0; */
-  /*          for (unsigned i=0;i<num_recovery_terms;i++) */
-  /*           { */
-  /*            recovered_vort_second_deriv+= */
-  /*             (*recovered_vorticity_coefficient_pt)[i]*psi_r[i]; */
-  /*           } */
-           
-  /*          // Keep adding */
-  /*          averaged_second_deriv_recovered_vort[nod_pt]+= */
-  /*           recovered_vort_second_deriv; */
-  /*          count[nod_pt]++; */
-  /*         } */
-  /*       } */
-  /*     } */
-     
-  /*    //Loop over all nodes to actually work out the average */
-  /*    unsigned nnod=mesh_pt->nnode(); */
-  /*    for(unsigned j=0;j<nnod;j++) */
-  /*     { */
-  /*      Node* nod_pt=mesh_pt->node_pt(j); */
-  /*      //Calculate the values of the smoothed vorticity  */
-  /*      averaged_second_deriv_recovered_vort[nod_pt]/=count[nod_pt]; */
-       
-  /*      //Assign smoothed vorticity to dofs */
-  /*      nod_pt->set_value(Smoothed_vorticity_index+n_deriv, */
-  /*                        averaged_second_deriv_recovered_vort[nod_pt]); */
-  /*     } */
-  /*   } */
-
-  /* } */
-
-
-
-// hierher needed? 
-
-/*  /// Output function for vorticity in patch */
-/*  void output_recover_vorticity_in_patch( */
-/*   ELEMENT* el_pt, */
-/*   Vector<double>* recovered_vorticity_coefficient_pt, */
-/*   std::ofstream& outfile, */
-/*   const unsigned& nplot) */
-/*  { */
-/*   // Tecplot header info */
-/*   outfile << el_pt->tecplot_zone_string(nplot); */
-  
-/*   unsigned num_recovery_terms=(*recovered_vorticity_coefficient_pt).size(); */
-  
-/*   // Create storage for the recovery shape function values  */
-/*   Vector<double> psi_r(num_recovery_terms); */
-  
-/*   //Create vector to hold local coordinates */
-/*   Vector<double> s(2);  */
-  
-/*   unsigned num_plot_points=el_pt->nplot_points(nplot); */
-/*   for (unsigned iplot=0;iplot<num_plot_points;iplot++) */
-/*    { */
-/*     // Get local coordinates of plot point */
-/*     el_pt->get_s_plot(iplot,nplot,s); */
-    
-/*     // Interpolate the global (Eulerian) coordinate */
-/*     Vector<double> x(2); */
-/*     el_pt->interpolated_x(s,x); */
-    
-/*     // Recovery shape functions at global (Eulerian) coordinate */
-/*     shape_rec(x,psi_r); */
-    
-/*     double recovered_vort=0.0; */
-/*     for (unsigned i=0;i<num_recovery_terms;i++) */
-/*      { */
-/*       recovered_vort+=(*recovered_vorticity_coefficient_pt)[i]*psi_r[i]; */
-/*      } */
-/*     outfile << x[0] << " "  */
-/*             << x[1] << " "  */
-/*             << recovered_vort << " "  */
-/*             << std::endl; */
-/*    } */
-/* //    // Write tecplot footer (e.g. FE connectivity lists) */
-/* //    el_pt->write_tecplot_zone_footer(outfile,nplot); */
-/*  } */
- 
   private:
 
  /// Order of recovery polynomials
